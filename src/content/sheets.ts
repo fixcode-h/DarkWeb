@@ -181,9 +181,10 @@ export class RootSheets {
   }
 
   /** 背景图反转补丁 */
-  addPatch(hit: BgImageHit, dataUrl: string): void {
+  /** image 是完整的 background-image 值 */
+  addPatch(hit: BgImageHit, image: string): void {
     const key = hit.wrappers.join('|') + '|' + hit.selector;
-    let rule = `${hit.selector}{background-image:url("${dataUrl}")${hit.important ? ' !important' : ''}}`;
+    let rule = `${hit.selector}{background-image:${image}${hit.important ? ' !important' : ''}}`;
     for (let i = hit.wrappers.length - 1; i >= 0; i--) rule = `${hit.wrappers[i]}{${rule}}`;
     this.patches.set(key, rule);
     try {

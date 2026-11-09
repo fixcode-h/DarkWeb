@@ -119,7 +119,17 @@ async function main() {
       await page.screenshot({ path: join(outDir, 'zhihu.png'), fullPage: true });
       const d = await diag(page);
       writeFileSync(join(outDir, 'zhihu-diag.json'), JSON.stringify(d, null, 2));
-      check('知乎：原生暗色不可用时自动退回动态模式', d.mode === 'dynamic' && d.reason === 'native-failed', `${d.mode}/${d.reason}`);
+      check('知乎：首次访问写入原生暗色 cookie，本次先用动态模式', d.mode === 'dynamic' && d.reason === 'native-pending', `${d.mode}/${d.reason}`);
+      const cookie = await page.evaluate(() => document.cookie);
+      check('知乎：已写入 themeApp=dark', /(^|; )themeApp=dark/.test(cookie), cookie);
+      {
+        // 第二次访问：cookie 已在，走原生；仿真页没有暗色主题 -> 自动退回动态模式
+        const p2 = await open(Z + '?visit=native', 2000);
+        const d2 = await diag(p2);
+        const lum2 = await p2.evaluate(() => window.__t.info(document.body).bgLum);
+        check('知乎：原生暗色不可用时自动退回动态模式', d2.mode === 'dynamic' && d2.reason === 'native-failed' && lum2 < 0.03, `${d2.mode}/${d2.reason}/${lum2.toFixed(4)}`);
+        await p2.close();
+      }
       const r = await page.evaluate(() => {
         const t = window.__t;
         const q = (s) => document.querySelector(s);
@@ -204,11 +214,18 @@ async function main() {
 
     // ---------- 知乎（原生暗色可用） ----------
     {
-      const page = await open(Z + '?native=1', 1000);
+      // 换一个路径：原生暗色的确认结果按路径第一段记录，不影响上面 / 的测试
+      const page = await open(Z + 'explore?native=1', 1000);
       const d = await diag(page);
       const r = await page.evaluate(() => ({ theme: document.documentElement.getAttribute('data-theme'), body: window.__t.info(document.body).bgLum }));
       check('知乎：原生暗色可用时使用原生主题', d.mode === 'native' && r.theme === 'dark' && r.body < 0.03, `${d.mode} / ${r.theme} / ${r.body.toFixed(4)}`);
       await page.close();
+      // 再次访问：已确认可用，不再并行跑动态模式
+      const again = await open(Z + 'explore?native=1&visit=2', 1000);
+      const d2 = await diag(again);
+      const body2 = await again.evaluate(() => window.__t.info(document.body).bgLum);
+      check('知乎：确认过原生暗色后直接走原生，不跑动态模式', d2.mode === 'native' && d2.sheets === 0 && d2.timings.startupMainThread <= 5 && body2 < 0.03, `${d2.mode} / sheets ${d2.sheets} / ${d2.timings.startupMainThread}ms / ${body2.toFixed(4)}`);
+      await again.close();
     }
 
     // ---------- 哔哩哔哩 ----------
@@ -232,7 +249,7 @@ async function main() {
           upload: t.parse(getComputedStyle(q('#upload')).backgroundColor),
           uploadText: t.info(q('#upload')).contrast,
           logo: t.parse(getComputedStyle(q('#logo')).color),
-          sending: getComputedStyle(q('#sending')).backgroundColor,
+          sending: t.info(q('#sending')).bgLum,
           dm: getComputedStyle(q('#dm')).color,
           cover: [q('#cover1').getAttribute('data-drak-img'), getComputedStyle(q('#cover1')).filter],
           qr: q('#qr').getAttribute('data-drak-img'),
@@ -250,7 +267,7 @@ async function main() {
       check('B站：标题与次要文字对比度 ≥ 4.5', r.title >= 4.5 && r.owner >= 4.5, `${r.title.toFixed(2)} / ${r.owner.toFixed(2)}`);
       check('B站：粉色投稿按钮保留色相、白字可读', r.upload.r > r.upload.g + 60 && r.upload.r > r.upload.b && r.uploadText >= 3, `rgb(${r.upload.r},${r.upload.g},${r.upload.b}) / ${r.uploadText.toFixed(2)}`);
       check('B站：品牌蓝 logo 保留色相', r.logo.b > r.logo.r + 60, `rgb(${r.logo.r},${r.logo.g},${r.logo.b})`);
-      check('B站：播放器区域与弹幕保持原样', r.sending === 'rgb(255, 255, 255)' && r.dm === 'rgb(255, 255, 255)', `${r.sending} / ${r.dm}`);
+      check('B站：播放器画面区弹幕保持原样，发送栏跟随暗色', r.sending < 0.03 && r.dm === 'rgb(255, 255, 255)', `${r.sending.toFixed(4)} / ${r.dm}`);
       check('B站：视频封面不动', r.cover[0] === null && r.cover[1] === 'none', r.cover.join(' '));
       check('B站：登录二维码不动', r.qr === null, String(r.qr));
       check('B站：评论区（open Shadow DOM）已转换', r.host < 0.03 && r.ctitle.contrast >= 4.5, `${r.host.toFixed(4)} / ${r.ctitle.contrast.toFixed(2)}`);

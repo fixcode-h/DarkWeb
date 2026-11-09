@@ -9,7 +9,8 @@ export const BUILTIN_RULES: SiteRule[] = [
   {
     match: ['*.zhihu.com'],
     mode: 'native',
-    native: { attr: ['data-theme', 'dark'] },
+    // 知乎夜间主题由服务端按 cookie themeApp=dark 渲染；只设 data-theme 时顶栏和卡片仍是白的（2026-11 线上核实）
+    native: { attr: ['data-theme', 'dark'], cookie: ['themeApp', 'dark'] },
     invert: ['.ztext-math img', 'img[src*="/equation?tex="]', 'img[data-formula]'],
     ignore: ['.ZVideo-player', '.VideoAnswerPlayer', '.ZVideoItem-video', '[class*="VideoPlayer"]'],
     keepImage: ['.Avatar', 'img[src*="qrcode"]', '.signQr-container img'],
@@ -18,8 +19,11 @@ export const BUILTIN_RULES: SiteRule[] = [
     match: ['*.bilibili.com'],
     mode: 'dynamic',
     ignore: [
-      '.bpx-player-container',
-      '#bilibili-player',
+      // 只排除画面和浮层；整个 .bpx-player-container 排除会让下方弹幕发送栏保持白色（2026-11 线上核实）
+      '.bpx-player-video-area',
+      '.bpx-player-dialog-area',
+      '.bpx-player-tooltip-area',
+      '.bpx-player-context-area',
       '.bilibili-player',
       '#live-player',
       '.live-player-mounter',

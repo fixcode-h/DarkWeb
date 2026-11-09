@@ -17,6 +17,8 @@ export class InlineStyler {
   private churn = new WeakMap<Element, { n: number; t: number }>();
   private iconCache = new WeakMap<SVGSVGElement, boolean>();
   count = 0;
+  /** 内联 style 里的单张背景图（如 B 站动态页底图 <div class="bg" style="background-image:url(...)">） */
+  onBgUrl: ((el: HTMLElement, url: string) => void) | null = null;
 
   constructor(private ctx: Ctx) {}
 
@@ -56,7 +58,8 @@ export class InlineStyler {
     const isOurs = (prop: string) => written !== undefined && written.get(prop) === style.getPropertyValue(prop);
 
     if (styleAttr) {
-      const decls = this.ctx.rewriter.collect(style, { base: el.baseURI });
+      const onBg = this.onBgUrl && el instanceof HTMLElement ? (url: string) => this.onBgUrl!(el, url) : undefined;
+      const decls = this.ctx.rewriter.collect(style, { base: el.baseURI }, onBg);
       for (const d of decls) {
         if (d.value === d.original || isOurs(d.prop)) continue;
         record(d.prop);
@@ -109,6 +112,12 @@ export class InlineStyler {
     }
     if (!orig.has(prop)) orig.set(prop, [style.getPropertyValue(prop), style.getPropertyPriority(prop)]);
     style.setProperty(prop, value, 'important');
+    let written = this.written.get(el);
+    if (!written) {
+      written = new Map();
+      this.written.set(el, written);
+    }
+    written.set(prop, style.getPropertyValue(prop));
     this.lastAttr.set(el, el.getAttribute('style'));
   }
 

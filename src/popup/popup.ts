@@ -14,6 +14,7 @@ const REASON_TEXT: Record<string, string> = {
   'site-rule': '（站点规则）',
   'user-choice': '（你的选择）',
   'native-failed': '（原生暗色未生效，已改用动态配色）',
+  'native-pending': '（已开启站点原生暗色，刷新后生效；本次先用动态配色）',
   'page-already-dark': '：页面本身已是深色，自动跳过',
   'too-many-errors': '：异常过多，已自动降级',
   'slow-page': '：页面过重，已停止图片分析',
