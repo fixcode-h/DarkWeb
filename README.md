@@ -2,8 +2,6 @@
 
 通用自适应暗色模式浏览器插件（Chrome / Edge，Manifest V3）。按颜色在页面中的角色（背景、文字、边框、阴影、强调色）在 OKLCH 色彩空间里重新配色，保留边框和层次，不做整页反色。
 
-设计文档：https://claude.ai/artifact/5zVch7ULo1Rfd2PAef2UQV
-
 ## 分支
 
 - `dev`：日常开发，推送后跑 CI（类型检查、单元测试、端到端验收）
