@@ -29,9 +29,11 @@
   </div>
 </div>
 <div class="bpx-player-container" id="player">
-  <canvas id="danmakuCanvas" width="320" height="60"></canvas>
-  <span class="bpx-player-dm" id="dm" style="color: #ffffff">弹幕（白色）</span>
-  <div class="bpx-player-sending-area" id="sending">发送弹幕区域（应保持原样）</div>
+  <div class="bpx-player-video-area">
+    <canvas id="danmakuCanvas" width="320" height="60"></canvas>
+    <span class="bpx-player-dm" id="dm" style="color: #ffffff">弹幕（白色）</span>
+  </div>
+  <div class="bpx-player-sending-area" id="sending">发送弹幕区域（应跟随暗色）</div>
 </div>
 <div class="login-scan-box"><img id="qr" src="//i0.hdslb.com:__PORT__/img/qr.png" width="120" height="120"></div>
 <bili-comments id="comments"></bili-comments>

@@ -17,6 +17,7 @@ export class MediaAnalyzer {
   private tracked: WeakRef<Element>[] = [];
   private bgSeen = new Set<string>();
   private bgCount = 0;
+  private inlineSeen = new WeakSet<Element>();
   private active = 0;
   private queue: (() => void)[] = [];
   counts = { keep: 0, invert: 0, dim: 0 };
@@ -148,12 +149,39 @@ export class MediaAnalyzer {
             this.cache.set(hit.url, p);
           }
           const cls = await p;
+          if (cls === 'dim') {
+            // 大面积浅色背景图（如 B 站动态页底图）：叠一层半透明黑压暗，不动图本身
+            this.rootOf(root)?.addPatch(hit, dimmedBg(hit.url));
+            return;
+          }
           if (cls !== 'invert') return;
           const res = (await chrome.runtime.sendMessage({ type: 'invert-image', url: hit.url })) as InvertResponse;
-          if (res?.ok && res.dataUrl) this.rootOf(root)?.addPatch(hit, res.dataUrl);
+          if (res?.ok && res.dataUrl) this.rootOf(root)?.addPatch(hit, `url("${res.dataUrl}")`);
         });
       }),
     );
+  }
+
+  /** 内联背景图：分类后通过 apply 写回 background-image */
+  onInlineBg(el: HTMLElement, url: string, apply: (image: string) => void): void {
+    if (this.stopped || this.bgCount >= MAX_BG_ANALYSIS || this.inlineSeen.has(el)) return;
+    this.inlineSeen.add(el);
+    this.bgCount++;
+    this.schedule(async () => {
+      let p = this.cache.get(url);
+      if (!p) {
+        p = this.remoteClassify(url);
+        this.cache.set(url, p);
+      }
+      const cls = await p;
+      if (this.stopped || !el.isConnected) return;
+      if (cls === 'dim') {
+        apply(dimmedBg(url));
+      } else if (cls === 'invert') {
+        const res = (await chrome.runtime.sendMessage({ type: 'invert-image', url })) as InvertResponse;
+        if (!this.stopped && res?.ok && res.dataUrl) apply(`url("${res.dataUrl}")`);
+      }
+    });
   }
 
   stop(): void {
@@ -162,6 +190,12 @@ export class MediaAnalyzer {
     for (const ref of this.tracked) ref.deref()?.removeAttribute(ATTR);
     this.tracked = [];
   }
+}
+
+/** 大面积浅色背景图：叠一层半透明黑压暗，不动图本身 */
+function dimmedBg(url: string): string {
+  const safe = url.replace(/["\\\n]/g, encodeURIComponent);
+  return `linear-gradient(rgba(0,0,0,.78),rgba(0,0,0,.78)),url("${safe}")`;
 }
 
 /** 所有根共用的媒体样式：分类结果 -> 滤镜；站点规则的 invert 选择器 */
