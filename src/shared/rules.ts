@@ -14,6 +14,8 @@ export interface SiteRule {
     attr?: [string, string];
     /** 在 <html> 上添加的 class */
     className?: string;
+    /** 服务端按 cookie 渲染主题的站点：写入的 cookie，如 ['themeApp', 'dark']。写入后下次加载生效，关闭时还原 */
+    cookie?: [string, string];
   };
   /** 整块不处理的区域（如播放器） */
   ignore?: string[];
@@ -91,6 +93,12 @@ export function validateRule(raw: unknown): string[] {
       errs.push('native.attr 必须是 [属性名, 值]');
     }
     if (n.className !== undefined && typeof n.className !== 'string') errs.push('native.className 必须是字符串');
+    if (
+      n.cookie !== undefined &&
+      !(Array.isArray(n.cookie) && n.cookie.length === 2 && n.cookie.every((x) => typeof x === 'string' && /^[\w.-]+$/.test(x)))
+    ) {
+      errs.push('native.cookie 必须是 [名称, 值]，只能包含字母、数字、下划线、点和短横线');
+    }
   }
   return errs;
 }

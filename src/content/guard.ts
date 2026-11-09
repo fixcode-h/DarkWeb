@@ -110,7 +110,9 @@ export function sampleBrightness(ignore: (el: Element) => boolean): BrightSample
       const bg = effectiveBg(top);
       // 一路找不到背景就落到画布背景：用 html 的背景
       const lum = bg ? bg.lum : (() => {
-        const c = parseColor(getComputedStyle(document.documentElement).backgroundColor);
+        // 画布背景：html 没设背景时按 CSS 规则沿用 body 的背景
+        let c = parseColor(getComputedStyle(document.documentElement).backgroundColor);
+        if ((!c || c.a <= 0.5) && document.body) c = parseColor(getComputedStyle(document.body).backgroundColor);
         return c && c.a > 0.5 ? relativeLuminance(c) : 1;
       })();
       if (lum > 0.4) {

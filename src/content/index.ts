@@ -21,6 +21,7 @@ import { isIgnored, type Ctx } from './context';
 import { Guard, sampleBrightness } from './guard';
 import { InlineStyler } from './inline';
 import { MediaAnalyzer, mediaCss } from './media';
+import { ensureNativeCookie, restoreNativeCookie } from './native-cookie';
 import { RootSheets, wrapScreen } from './sheets';
 
 type Mode = 'off' | 'dynamic' | 'native' | 'filter';
@@ -44,6 +45,47 @@ function openOrClosedShadowRoot(el: Element): ShadowRoot | null {
 function lumOf(color: string): number | null {
   const c = parseColor(color);
   return c && c.a > 0.5 ? relativeLuminance(c) : null;
+}
+
+/**
+ * 记住“本站这一类页面的原生暗色已确认可用”，按路径第一段区分（知乎 /explore、/question 有暗色主题，/signin 没有）。
+ * 要在 document_start 同步读到，所以放站点自己的 localStorage（扩展存储是异步的）。
+ * 只有确认过的页面类型才跳过并行的动态模式，没确认过的照常试探，不会闪白。
+ */
+const NATIVE_OK_KEY = '__drak_native_ok';
+const pathKind = () => '/' + (location.pathname.split('/')[1] || '');
+function readVerified(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(NATIVE_OK_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function nativeVerified(): boolean {
+  return readVerified().includes(pathKind());
+}
+function setNativeVerified(ok: boolean): void {
+  try {
+    const kind = pathKind();
+    const list = readVerified().filter((k) => k !== kind);
+    if (ok) list.push(kind);
+    if (list.length) localStorage.setItem(NATIVE_OK_KEY, JSON.stringify(list.slice(-30)));
+    else localStorage.removeItem(NATIVE_OK_KEY);
+  } catch {
+    /* 存储不可用时每次都试探 */
+  }
+}
+
+/** 页面当前（不含我们的样式）是否已是深色 */
+function pageLooksDark(ignoreSelector: string): boolean {
+  if (!document.body) return false;
+  const b = getComputedStyle(document.body);
+  const bg = lumOf(b.backgroundColor) ?? lumOf(getComputedStyle(html).backgroundColor) ?? 1;
+  const fg = lumOf(b.color) ?? 0;
+  if (!(bg < 0.06 && fg > 0.25)) return false;
+  // 只看 body 不够：知乎只设 data-theme 时 body 变黑，顶栏和卡片仍是白的。再按可视区采样确认。
+  return sampleBrightness((el) => isIgnored(el, ignoreSelector)).ratio <= 0.1;
 }
 
 /** 站点规则生成的样式：vars 直接写进影子变量，css 原样追加 */
@@ -107,6 +149,8 @@ class DynamicSession {
       onBgImage: (hit, root) => this.media.onBgImage(hit, root),
     };
     this.inline = new InlineStyler(this.ctx);
+    this.inline.onBgUrl = (el, url) =>
+      this.media.onInlineBg(el, url, (image) => this.inline.force(el, 'background-image', image));
     this.media = new MediaAnalyzer(this.ctx, (r) => this.roots.get(r));
     this.siteSheet = this.newSheet(wrapScreen(siteCss(rule)));
     this.mediaSheet = this.newSheet(wrapScreen(mediaCss(rule.invert)));
@@ -220,10 +264,7 @@ class DynamicSession {
     doc?.detach();
     let dark = false;
     try {
-      const b = getComputedStyle(document.body);
-      const bg = lumOf(b.backgroundColor) ?? lumOf(getComputedStyle(html).backgroundColor) ?? 1;
-      const fg = lumOf(b.color) ?? 0;
-      dark = bg < 0.06 && fg > 0.25;
+      dark = pageLooksDark(this.ctx.ignoreSelector);
     } finally {
       html.removeAttribute('data-drak-off');
       document.adoptedStyleSheets = saved;
@@ -444,6 +485,7 @@ class Drak {
   private nativeApplied: { attr?: [string, string | null]; className?: string } | null = null;
   private nativeObserver: MutationObserver | null = null;
   private nativeProbing = false;
+  private probeFresh = false;
   private cacheText: string | null = null;
   private t0 = performance.now();
   firstApplyMs = 0;
@@ -543,6 +585,8 @@ class Drak {
     if (mode === 'off') return this.turnOff('rule-off');
     html.removeAttribute('data-drak-off');
     this.reason = siteMode !== 'auto' ? 'user-choice' : rule.mode ? 'site-rule' : 'default';
+    const cookie = rule.native?.cookie;
+    if (cookie && mode !== 'native') restoreNativeCookie(...cookie);
     if (mode === 'filter') {
       this.mode = 'filter';
       html.setAttribute('data-drak-mode', 'filter');
@@ -568,6 +612,12 @@ class Drak {
     this.mode = 'native';
     html.setAttribute('data-drak-mode', 'native');
     const n = rule.native!;
+    if (n.cookie && !ensureNativeCookie(...n.cookie)) {
+      // 服务端按 cookie 渲染主题：本次加载仍是浅色，先用动态配色，下次加载起走原生暗色
+      this.startDynamic(rule);
+      this.reason = 'native-pending';
+      return;
+    }
     const assert = () => {
       if (n.attr && html.getAttribute(n.attr[0]) !== n.attr[1]) html.setAttribute(n.attr[0], n.attr[1]);
       if (n.className && !html.classList.contains(n.className)) html.classList.add(n.className);
@@ -580,9 +630,33 @@ class Drak {
     // 站点脚本可能在初始化时改回去，持续守住
     this.nativeObserver = new MutationObserver(() => assert());
     this.nativeObserver.observe(html, { attributes: true, attributeFilter: n.attr ? [n.attr[0], 'class'] : ['class'] });
+    if (n.cookie && nativeVerified()) {
+      // cookie 已在且之前确认过原生暗色可用：服务端已按暗色渲染，不必并行跑动态模式（知乎上能省下约 300ms 主线程）。
+      // DOMContentLoaded 时再确认一次，万一没变暗再退回动态模式。
+      const check = () => {
+        if (this.mode !== 'native' || this.session) return;
+        // 撤掉基础层量页面自己的颜色（基础层给 html 上了深色底，会造成误判）
+        html.setAttribute('data-drak-off', '');
+        const dark = pageLooksDark(rule.ignore.join(','));
+        html.removeAttribute('data-drak-off');
+        if (dark) {
+          html.setAttribute('data-drak-ready', '');
+          this.firstApplyMs = performance.now() - this.t0;
+          return;
+        }
+        setNativeVerified(false);
+        this.stopNative();
+        this.startDynamic(rule);
+        this.reason = 'native-failed';
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', check, { once: true });
+      else check();
+      return;
+    }
     // 原生主题能否生效要等页面样式加载完才知道；期间并行跑动态模式，避免试探失败时闪白。
     // DOMContentLoaded 时动态会话会撤掉自己的样式量一次页面原始颜色：已是深色说明原生主题生效。
     this.nativeProbing = true;
+    this.probeFresh = document.readyState === 'loading';
     this.mode = 'dynamic';
     this.session = new DynamicSession(this, this.settings, rule, this.guard, this.cacheText);
     this.guard.run('start', () => this.session!.start());
@@ -593,6 +667,8 @@ class Drak {
   onPageAlreadyDark(): void {
     if (this.nativeProbing) {
       this.nativeProbing = false;
+      // 只认页面刚加载时的试探结果；已加载页面上重启时量到的颜色可能还带着上一轮的改动
+      if (this.probeFresh && this.rule().native?.cookie) setNativeVerified(true);
       this.session?.stop();
       this.session = null;
       this.mode = 'native';
@@ -611,6 +687,7 @@ class Drak {
       this.nativeProbing = false;
       this.stopNative();
       this.mode = 'dynamic';
+      // cookie 不在这里还原：同站有的页面（如登录页）没有暗色主题，还原会让其他页面下次又要先走一遍动态配色
       this.reason = 'native-failed';
       html.setAttribute('data-drak-mode', 'dynamic');
     }
@@ -630,6 +707,8 @@ class Drak {
 
   turnOff(reason: string): void {
     this.reason = reason;
+    const cookie = this.rule().native?.cookie;
+    if (cookie) restoreNativeCookie(...cookie);
     this.teardown();
     this.mode = 'off';
     html.setAttribute('data-drak-off', '');

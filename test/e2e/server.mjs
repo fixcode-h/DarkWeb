@@ -88,7 +88,7 @@ export function startServer() {
         return send('text/css', readFileSync(join(dir, 'zhihu.css')), Number(url.searchParams.get('delay') || 0));
       }
       if (host === 's1.hdslb.com' && url.pathname === '/bili.css') return send('text/css', readFileSync(join(dir, 'bili.css')));
-      if (host.endsWith('zhihu.com') && url.pathname === '/') return page('zhihu.html');
+      if (host.endsWith('zhihu.com') && (url.pathname === '/' || url.pathname.startsWith('/explore'))) return page('zhihu.html');
       if (host.endsWith('bilibili.com') && url.pathname === '/') return page('bilibili.html');
       if (url.pathname === '/plain') {
         return send('text/html; charset=utf-8', '<!doctype html><html><head><style>body{background:#fff;color:#222}p{border-bottom:1px solid #eee}</style></head><body><p id="p">普通网站</p></body></html>');
