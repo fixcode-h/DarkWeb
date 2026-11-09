@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Drak 设置</title>
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body class="options">
+  <h1>Drak 暗色模式 · 设置</h1>
+  <p>大多数网站不需要任何设置。某个网站效果不理想时，可以在这里为它单独写修正规则。</p>
+
+  <h2>按站点的模式</h2>
+  <section>
+    <table class="sites" id="sites"><tbody></tbody></table>
+    <p id="noSites">还没有单独设置过的网站。在弹窗里修改“本站模式”后会出现在这里。</p>
+  </section>
+
+  <h2>站点修正规则</h2>
+  <section>
+    <p>JSON 数组，每条规则可用的字段：match（必填，如 "*.example.com"）、mode（dynamic / native / filter / off）、
+      native、ignore、invert、keepImage、vars、css。用户规则优先于内置规则。</p>
+    <textarea id="rules" spellcheck="false"></textarea>
+    <div class="actions">
+      <button class="primary" id="saveRules" type="button">保存规则</button>
+      <button id="example" type="button">插入示例</button>
+      <span id="rulesMsg"></span>
+    </div>
+    <div class="errors" id="rulesErr"></div>
+  </section>
+
+  <h2>内置规则（只读）</h2>
+  <section><pre id="builtin"></pre></section>
+
+  <h2>缓存</h2>
+  <section>
+    <p>为了重复访问时不闪白，Drak 会按网站缓存上次生成的配色样式。</p>
+    <div class="actions"><button id="clearCache" type="button">清空缓存</button><span id="cacheMsg"></span></div>
+  </section>
+  <script src="options.js"></script>
+</body>
+</html>

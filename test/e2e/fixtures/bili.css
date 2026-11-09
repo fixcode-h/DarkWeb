@@ -1,0 +1,13 @@
+.bili-header { background: var(--bg1); border-bottom: 1px solid var(--line_regular); }
+.bili-header__bar { display: flex; gap: 16px; align-items: center; height: 64px; padding: 0 24px; }
+.logo { color: var(--brand_blue); font-weight: 700; font-size: 22px; text-decoration: none; }
+.nav-link { color: var(--text1); text-decoration: none; }
+.header-upload-entry { background: var(--brand_pink); color: #fff; border: 0; border-radius: 8px; padding: 6px 16px; }
+.feed-card-grid { display: grid; grid-template-columns: repeat(2, 260px); gap: 20px; padding: 20px 24px; }
+.bili-video-card { background: var(--bg1); border-radius: 6px; }
+.bili-video-card__cover img { border-radius: 6px; display: block; }
+.bili-video-card__info--tit { color: var(--text1); font-size: 15px; margin: 8px 0 4px; }
+.bili-video-card__info--owner { color: var(--text3); font-size: 13px; }
+.bpx-player-container { background: #000; margin: 0 24px; padding: 8px; }
+.bpx-player-sending-area { background-color: #ffffff; color: #18191c; padding: 6px; }
+.login-scan-box { padding: 12px 24px; }

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Drak</title>
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body class="popup">
+  <header>
+    <div class="brand"><img src="icons/icon-32.png" alt="" width="20" height="20" /> Drak 暗色模式</div>
+    <label class="switch" title="全局开关"><input type="checkbox" id="enabled" /><span></span></label>
+  </header>
+
+  <section class="site">
+    <div class="host" id="host">—</div>
+    <label class="row">
+      <span>本站模式</span>
+      <select id="siteMode">
+        <option value="auto">自动（推荐）</option>
+        <option value="dynamic">动态配色</option>
+        <option value="native">站点原生暗色</option>
+        <option value="filter">滤镜反色（兜底）</option>
+        <option value="off">本站关闭</option>
+      </select>
+    </label>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section>
+    <label class="row"><span>背景亮度</span><input type="range" id="brightness" min="0" max="100" /></label>
+    <label class="row"><span>文字对比度</span><input type="range" id="contrast" min="0" max="100" /></label>
+    <label class="row check"><input type="checkbox" id="dimImages" /><span>白底截图、图表降低亮度</span></label>
+    <label class="row check"><input type="checkbox" id="followSystem" /><span>只在系统为深色时启用</span></label>
+  </section>
+
+  <details id="diagBox">
+    <summary>诊断信息</summary>
+    <pre id="diag"></pre>
+    <button id="copyDiag" type="button">复制诊断信息</button>
+  </details>
+
+  <footer>
+    <span class="hint">快捷键 Alt+Shift+D 开关本站</span>
+    <a href="#" id="openOptions">规则与设置</a>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>
