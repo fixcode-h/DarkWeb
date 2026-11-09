@@ -1,0 +1,48 @@
+/*
+ * 静态基础层（设计文档第 6 节）：浏览器在构建 DOM 之前注入，不等待任何异步操作。
+ * data-drak-ready 之前强制 html/body 为深色，避免首屏闪白；之后交给动态覆盖样式。
+ */
+@media screen {
+  html:not([data-drak-off]) {
+    color-scheme: dark !important;
+    background-color: rgb(22, 22, 22);
+    color: rgb(225, 225, 225);
+  }
+
+  html:not([data-drak-off]):not([data-drak-ready]),
+  html:not([data-drak-off]):not([data-drak-ready]) > body {
+    background-color: rgb(22, 22, 22) !important;
+  }
+
+  /* 初次应用期间关闭过渡，避免“从白渐变到黑” */
+  html[data-drak-applying]:not([data-drak-off]) *,
+  html[data-drak-applying]:not([data-drak-off]) *::before,
+  html[data-drak-applying]:not([data-drak-off]) *::after {
+    transition: none !important;
+  }
+
+  /* 图片分类结果 */
+  html:not([data-drak-off]) [data-drak-img="invert"] {
+    filter: invert(1) hue-rotate(180deg) !important;
+  }
+  html:not([data-drak-off]) [data-drak-img="dim"] {
+    filter: brightness(0.8) contrast(1.1) !important;
+  }
+
+  /* 滤镜模式：兜底方案，整页反转，媒体再反转回来 */
+  html[data-drak-mode="filter"]:not([data-drak-off]) {
+    filter: invert(1) hue-rotate(180deg) !important;
+    background-color: rgb(255, 255, 255) !important;
+    color-scheme: light !important;
+  }
+  html[data-drak-mode="filter"]:not([data-drak-off]) > body {
+    background-color: rgb(255, 255, 255);
+  }
+  html[data-drak-mode="filter"]:not([data-drak-off]) :is(img, video, picture, canvas, iframe, embed, object, svg image),
+  html[data-drak-mode="filter"]:not([data-drak-off]) [style*="background-image"] {
+    filter: invert(1) hue-rotate(180deg) !important;
+  }
+  html[data-drak-mode="filter"]:not([data-drak-off]) :is(picture img, [data-drak-img]) {
+    filter: none !important;
+  }
+}

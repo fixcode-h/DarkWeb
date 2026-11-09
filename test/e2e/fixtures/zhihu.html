@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>知乎仿真页</title>
+<link rel="stylesheet" href="//static.zhimg.com:__PORT__/zhihu.css?delay=__CSSDELAY__">
+<style>
+  /* 知乎原生夜间主题（仿真）：html[data-theme=dark] 下切换变量 */
+  :root { --GBL01A: #ffffff; --GBK99A: #121212; --GBK06A: #8590a6; --page: #f6f6f6; }
+  html[data-theme="dark"][data-native-supported] { --GBL01A: #121212; --GBK99A: #d3d3d3; --GBK06A: #8a8a8a; --page: #0b0b0b; }
+  body { background: var(--page); color: var(--GBK99A); }
+  .Card { background: var(--GBL01A); }
+</style>
+</head>
+<body>
+<header class="AppHeader"><a class="AppHeader-logo" href="#">知乎</a><input class="SearchBar-input" placeholder="搜索"><button class="Button Button--blue" id="ask">提问</button></header>
+<main class="Topstory">
+  <div class="Card TopstoryItem" id="card1">
+    <h2 class="ContentItem-title" id="title1">如何评价一个好的暗色模式？</h2>
+    <div class="RichText" id="rich1">
+      <p id="para1">正文段落，包含 <a href="#" id="link1">一个链接</a> 和公式 <span class="ztext-math"><img id="formula" src="/equation?tex=E%3Dmc%5E2" alt="E=mc^2"></span>。</p>
+      <blockquote id="quote">引用块：浅色左边框需要在暗色下仍然可见。</blockquote>
+      <pre id="code"><code>const dark = true; // 代码块</code></pre>
+      <table id="table"><tr><th>表头</th><th>数值</th></tr><tr><td>A</td><td>1</td></tr></table>
+      <p>配图：<img id="photo" src="//pic1.zhimg.com:__PORT__/img/photo.png" width="300" height="200"></p>
+      <p>截图：<img id="shot" src="//pic1.zhimg.com:__PORT__/img/screenshot.png" width="480" height="320"></p>
+      <p>图标：<img id="glyph" src="/img/glyph.png" width="32" height="32"></p>
+    </div>
+    <div class="ContentItem-meta" id="meta1">赞同 1.2 万 · 评论 300</div>
+  </div>
+  <div class="Card TopstoryItem" id="card2" style="background-color: #ffffff; color: #333333; border: 1px solid #ebebeb">
+    <h2 class="ContentItem-title">内联样式卡片</h2>
+    <div class="sc-abc" id="sc">CSS-in-JS 插入的规则</div>
+  </div>
+  <div class="ZVideo-player" id="video"><span id="videoText">视频播放器（应保持原样）</span></div>
+  <div id="feed"></div>
+</main>
+<div class="Modal-backdrop" id="backdrop"></div>
+<script>
+  // 模拟 CSS-in-JS：insertRule
+  const s = document.createElement('style');
+  document.head.appendChild(s);
+  s.sheet.insertRule('.sc-abc { background-color: #fff; color: #000; border-bottom: 1px solid #eee; }');
+  // 模拟无限滚动
+  let n = 0;
+  function more() {
+    for (let i = 0; i < 5; i++) {
+      const d = document.createElement('div');
+      d.className = 'Card TopstoryItem dyn';
+      d.innerHTML = '<h2 class="ContentItem-title">动态加载的卡片 ' + (++n) + '</h2><div class="ContentItem-meta">meta</div>';
+      document.getElementById('feed').appendChild(d);
+    }
+  }
+  setTimeout(more, 300);
+  window.addEventListener('scroll', more);
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+name: Release
+
+# main 分支有新提交时自动构建、验收并发布扩展包
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Build package
+        run: npm run build:release
+      - name: Resolve tag
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION-build.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drak-${{ steps.meta.outputs.version }}
+          path: release/*.zip
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" release/drak-${{ steps.meta.outputs.version }}.zip \
+            --target "$GITHUB_SHA" \
+            --title "Drak ${{ steps.meta.outputs.version }}（build ${{ github.run_number }}）" \
+            --notes "由 main 分支提交 ${GITHUB_SHA::7} 自动构建。下载 zip 解压后，在 chrome://extensions 打开开发者模式，选择“加载已解压的扩展程序”。"

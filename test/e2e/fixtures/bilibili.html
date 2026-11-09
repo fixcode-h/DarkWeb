@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>哔哩哔哩仿真页</title>
+<link rel="stylesheet" href="//s1.hdslb.com:__PORT__/bili.css">
+<style>
+  :root {
+    --bg1: #FFFFFF; --bg2: #F6F7F8; --text1: #18191C; --text2: #61666D; --text3: #9499A0;
+    --line_regular: #E3E5E7; --brand_pink: #FF6699; --graph_bg_regular: #F1F2F3; --brand_blue: #00AEEC;
+  }
+  body { background-color: var(--bg1); color: var(--text1); margin: 0; font: 14px/1.5 sans-serif; }
+</style>
+</head>
+<body>
+<div class="bili-header" id="header">
+  <div class="bili-header__bar"><a class="logo" id="logo" href="#">bilibili</a><a class="nav-link" href="#">番剧</a><button class="header-upload-entry" id="upload">投稿</button></div>
+</div>
+<div class="feed-card-grid" id="grid">
+  <div class="bili-video-card" id="vc1">
+    <div class="bili-video-card__cover"><img id="cover1" src="//i0.hdslb.com:__PORT__/img/cover1.png" width="240" height="135"></div>
+    <h3 class="bili-video-card__info--tit" id="vtitle">视频标题：暗色模式测试</h3>
+    <div class="bili-video-card__info--owner" id="owner">UP 主名字 · 11-09</div>
+  </div>
+  <div class="bili-video-card" id="vc2">
+    <div class="bili-video-card__cover"><img src="//i0.hdslb.com:__PORT__/img/cover2.png" width="240" height="135"></div>
+    <h3 class="bili-video-card__info--tit">第二个视频</h3>
+    <div class="bili-video-card__info--owner">UP 主</div>
+  </div>
+</div>
+<div class="bpx-player-container" id="player">
+  <canvas id="danmakuCanvas" width="320" height="60"></canvas>
+  <span class="bpx-player-dm" id="dm" style="color: #ffffff">弹幕（白色）</span>
+  <div class="bpx-player-sending-area" id="sending">发送弹幕区域（应保持原样）</div>
+</div>
+<div class="login-scan-box"><img id="qr" src="//i0.hdslb.com:__PORT__/img/qr.png" width="120" height="120"></div>
+<bili-comments id="comments"></bili-comments>
+<lazy-panel id="lazy"></lazy-panel>
+<script>
+  // 评论区：外层 open shadow，内层 closed shadow；样式用可构造样式表 + <style>
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(':host { display: block; background: var(--bg1); border-top: 1px solid var(--line_regular); padding: 12px; } .title { color: var(--text1); font-weight: 600; }');
+  class BiliComments extends HTMLElement {
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: 'open' });
+      root.adoptedStyleSheets = [sheet];
+      root.innerHTML = '<div class="title" id="ctitle">评论 1234</div><bili-comment-renderer id="renderer"></bili-comment-renderer>';
+    }
+  }
+  class Renderer extends HTMLElement {
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: 'closed' });
+      window.__closedRoot = root;
+      root.innerHTML = '<style>.reply { background: #ffffff; color: #18191c; border: 1px solid #e3e5e7; padding: 8px; } .name { color: #fb7299; }</style>' +
+        '<div class="reply" id="reply"><span class="name" id="name">用户名</span> 评论内容在闭合 Shadow DOM 里</div>';
+    }
+  }
+  customElements.define('bili-comments', BiliComments);
+  customElements.define('bili-comment-renderer', Renderer);
+  // 页面加载后才定义的组件（已连接元素的升级）
+  setTimeout(() => {
+    customElements.define('lazy-panel', class extends HTMLElement {
+      constructor() {
+        super();
+        const r = this.attachShadow({ mode: 'open' });
+        r.innerHTML = '<style>div { background: #f6f7f8; color: #61666d; padding: 6px; }</style><div id="lazyInner">延迟升级的组件</div>';
+      }
+    });
+  }, 400);
+  const ctx = document.getElementById('danmakuCanvas').getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 320, 60);
+</script>
+</body>
+</html>
