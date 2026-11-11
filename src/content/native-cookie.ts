@@ -8,8 +8,8 @@ const ORIG_KEY = 'nativeCookieOrig';
 /** 本页当前是否需要这个 cookie；异步还原前再确认一次，避免关了又开时被误还原 */
 let wanted = false;
 
-export function readCookie(name: string): string | null {
-  for (const part of document.cookie.split(/;\s*/)) {
+export function readCookie(name: string, src: string = document.cookie): string | null {
+  for (const part of src.split(/;\s*/)) {
     const i = part.indexOf('=');
     if (i > 0 && part.slice(0, i) === name) {
       try {
@@ -40,44 +40,52 @@ function key(name: string): string {
   return `${name}@${location.hostname.split('.').slice(-2).join('.')}`;
 }
 
-/**
- * 确保 cookie 是目标值。返回 true 表示本次加载前就已是目标值（页面按原生暗色渲染），
- * false 表示刚写上（本次加载仍是浅色，下次加载才生效）。
- */
-export function ensureNativeCookie(name: string, value: string): boolean {
-  wanted = true;
-  const cur = readCookie(name);
-  if (cur === value) return true;
-  const k = key(name);
-  // 先记下原值（已有记录就不覆盖，保留最早的原值）
-  chrome.storage.local
-    .get(ORIG_KEY)
-    .then((data) => {
-      const map = { ...((data[ORIG_KEY] as Record<string, string | null>) || {}) };
-      if (k in map) return;
-      map[k] = cur;
-      return chrome.storage.local.set({ [ORIG_KEY]: map });
-    })
-    .catch(() => undefined);
-  writeCookie(name, value);
-  return false;
+/** 原值记录的读写串行执行：开了又马上关（设置还没读到时先按默认开启）时，还原必须排在记录之后，否则会找不到原值 */
+let queue: Promise<unknown> = Promise.resolve();
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+  const p = queue.then(fn, fn);
+  queue = p.catch(() => undefined);
+  return p;
 }
 
-/** 还原为开启前的值。只在 cookie 仍是我们写的值、且有原值记录时还原 */
-export function restoreNativeCookie(name: string, value: string): void {
-  wanted = false;
-  if (readCookie(name) !== value) return;
+type OrigMap = Record<string, string | null>;
+async function loadOrig(): Promise<OrigMap> {
+  const data = await chrome.storage.local.get(ORIG_KEY);
+  return { ...((data[ORIG_KEY] as OrigMap) || {}) };
+}
+
+/** 确保 cookie 是目标值（下次加载生效），并记下开启前的原值 */
+export function ensureNativeCookie(name: string, value: string): void {
+  wanted = true;
+  const cur = readCookie(name);
+  if (cur === value) return;
   const k = key(name);
-  chrome.storage.local
-    .get(ORIG_KEY)
-    .then((data) => {
-      const map = { ...((data[ORIG_KEY] as Record<string, string | null>) || {}) };
-      if (!(k in map)) return;
-      // 期间可能又被重新开启
-      if (wanted || readCookie(name) !== value) return;
-      writeCookie(name, map[k] ?? null);
-      delete map[k];
-      return chrome.storage.local.set({ [ORIG_KEY]: map });
-    })
-    .catch(() => undefined);
+  void serial(async () => {
+    const map = await loadOrig();
+    // 已有记录就不覆盖，保留最早的原值
+    if (k in map) return;
+    map[k] = cur;
+    await chrome.storage.local.set({ [ORIG_KEY]: map });
+  }).catch(() => undefined);
+  writeCookie(name, value);
+}
+
+/**
+ * 还原为开启前的值。只在 cookie 仍是我们写的值、且有原值记录时还原。
+ * 返回是否真的改回去了（网站下次加载会按浅色渲染）。
+ */
+export function restoreNativeCookie(name: string, value: string): Promise<boolean> {
+  wanted = false;
+  if (readCookie(name) !== value) return Promise.resolve(false);
+  const k = key(name);
+  return serial(async () => {
+    const map = await loadOrig();
+    if (!(k in map)) return false;
+    // 期间可能又被重新开启
+    if (wanted || readCookie(name) !== value) return false;
+    writeCookie(name, map[k] ?? null);
+    delete map[k];
+    await chrome.storage.local.set({ [ORIG_KEY]: map });
+    return readCookie(name) !== value;
+  }).catch(() => false);
 }
