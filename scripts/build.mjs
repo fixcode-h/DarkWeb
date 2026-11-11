@@ -1,8 +1,8 @@
-// 构建扩展到 dist/；--zip 时再打包到 release/drak-<version>.zip
+// 构建扩展到 dist/；--zip 时再打包到 release/drak-<manifest 版本号>.zip
 // 设置 BUILD_NUMBER 时，manifest 版本号写成 <version>.<BUILD_NUMBER>：Chrome 应用商店要求每次上传的版本号都更大
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
@@ -119,10 +119,22 @@ for (const s of [16, 32, 48, 128]) writeFileSync(join(dist, 'icons', `icon-${s}.
 if (zip) {
   const out = join(root, 'release');
   mkdirSync(out, { recursive: true });
-  const file = join(out, `drak-${pkg.version}.zip`);
+  // 把本次调整说明（scripts/release-notes.mjs 生成）放进包里
+  const notes = join(out, 'notes.md');
+  if (existsSync(notes)) copyFileSync(notes, join(dist, 'CHANGES.md'));
+  const file = join(out, `drak-${manifest.version}.zip`);
   rmSync(file, { force: true });
   execFileSync('zip', ['-qr', file, '.'], { cwd: dist });
   console.log(`packed ${file}`);
+  // 商店版：去掉 manifest 里的 key。商店用自己的密钥给扩展签名，ID 由商店决定；
+  // key 只用于让本地安装的包保持固定 ID，新包覆盖旧包而不是装成另一个扩展
+  const storeFile = join(out, `drak-${manifest.version}-store.zip`);
+  const { key: _key, ...storeManifest } = manifest;
+  writeFileSync(join(dist, 'manifest.json'), JSON.stringify(storeManifest, null, 2));
+  rmSync(storeFile, { force: true });
+  execFileSync('zip', ['-qr', storeFile, '.'], { cwd: dist });
+  writeFileSync(join(dist, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  console.log(`packed ${storeFile}`);
 } else {
   console.log(`built ${dist}`);
 }
