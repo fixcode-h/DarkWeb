@@ -9,7 +9,7 @@
   "background": { "service_worker": "sw.js", "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "Drak 暗色模式", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
   "options_page": "options.html",
-  "permissions": ["storage", "unlimitedStorage", "scripting", "activeTab", "tabs", "alarms"],
+  "permissions": ["storage", "unlimitedStorage", "scripting", "alarms"],
   "host_permissions": ["<all_urls>"],
   "commands": {
     "toggle-site": {
