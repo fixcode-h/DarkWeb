@@ -1,4 +1,5 @@
 // 构建扩展到 dist/；--zip 时再打包到 release/drak-<version>.zip
+// 设置 BUILD_NUMBER 时，manifest 版本号写成 <version>.<BUILD_NUMBER>：Chrome 应用商店要求每次上传的版本号都更大
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -41,6 +42,13 @@ writeFileSync(join(dist, 'base-system.css'), base.replace('@media screen {', '@m
 
 const manifest = JSON.parse(readFileSync(join(root, 'src/manifest.json'), 'utf8'));
 manifest.version = pkg.version;
+const buildNumber = process.env.BUILD_NUMBER;
+if (buildNumber) {
+  if (!/^\d+$/.test(buildNumber) || Number(buildNumber) > 65535) throw new Error(`BUILD_NUMBER 必须是 0-65535 的整数：${buildNumber}`);
+  if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error(`package.json 的 version 必须是 x.y.z：${pkg.version}`);
+  manifest.version = `${pkg.version}.${Number(buildNumber)}`;
+  manifest.version_name = `${pkg.version} (build ${Number(buildNumber)})`;
+}
 writeFileSync(join(dist, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 // ---- 图标：月牙，纯代码生成 PNG ----
