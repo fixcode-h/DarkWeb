@@ -16,12 +16,12 @@ import {
   themeSignature,
   type Settings,
 } from '../shared/settings';
-import { parseColor, relativeLuminance } from './engine/color';
 import { shadowVarName } from './engine/css-value';
 import { SheetRewriter } from './engine/rewriter';
 import { ColorTransformer, buildTheme, type Role } from './engine/transform';
 import { isIgnored, type Ctx } from './context';
 import { Guard, sampleBrightness } from './guard';
+import { pageLooksDark as looksDark, themeAttrChanged } from './native-dark';
 import { InlineStyler } from './inline';
 import { MediaAnalyzer, mediaCss } from './media';
 import { ensureNativeCookie, restoreNativeCookie } from './native-cookie';
@@ -44,6 +44,8 @@ type Root = Document | ShadowRoot;
 
 const html = document.documentElement;
 const host = location.hostname;
+/** 带端口的主机，用来查“本站模式”（按域名 / IP:端口区分） */
+const site = location.host;
 const isTop = window === window.top;
 const ATTR_FILTER = ['style', 'fill', 'stroke', 'stop-color', 'bgcolor', 'color', 'src', 'srcset', 'media', 'disabled', 'rel'];
 const CACHE_LIMIT = 1_500_000;
@@ -55,11 +57,6 @@ function openOrClosedShadowRoot(el: Element): ShadowRoot | null {
   } catch {
     return el.shadowRoot;
   }
-}
-
-function lumOf(color: string): number | null {
-  const c = parseColor(color);
-  return c && c.a > 0.5 ? relativeLuminance(c) : null;
 }
 
 /**
@@ -92,15 +89,9 @@ function setNativeVerified(ok: boolean): void {
   }
 }
 
-/** 页面当前（不含我们的样式）是否已是深色 */
+/** 页面当前（不含我们的样式）是否已是深色。调用前要先撤掉我们的样式 */
 function pageLooksDark(ignoreSelector: string): boolean {
-  if (!document.body) return false;
-  const b = getComputedStyle(document.body);
-  const bg = lumOf(b.backgroundColor) ?? lumOf(getComputedStyle(html).backgroundColor) ?? 1;
-  const fg = lumOf(b.color) ?? 0;
-  if (!(bg < 0.06 && fg > 0.25)) return false;
-  // 只看 body 不够：知乎只设 data-theme 时 body 变黑，顶栏和卡片仍是白的。再按可视区采样确认。
-  return sampleBrightness((el) => isIgnored(el, ignoreSelector)).ratio <= 0.1;
+  return looksDark((el) => isIgnored(el, ignoreSelector));
 }
 
 /** 站点规则生成的样式：vars 直接写进影子变量，css 原样追加 */
@@ -278,11 +269,18 @@ class DynamicSession {
     }
   }
 
-  /** 页面本身已是深色：暂时撤掉我们的样式量一下原始颜色 */
-  private pageAlreadyDark(): boolean {
+  /**
+   * 页面本身已是深色：暂时撤掉我们的样式量一下原始颜色。
+   * 已经处理过的内联样式不还原，所以页面加载完之后再量只是初筛，结果为真时由 app 停掉会话再确认一次。
+   */
+  pageAlreadyDark(): boolean {
     if (!document.body) return false;
     const doc = this.roots.get(document);
-    const saved = document.adoptedStyleSheets;
+    // 必须拷贝：adoptedStyleSheets 是同一个可观察数组，detach() 赋值后原引用的内容也跟着变
+    const saved = [...document.adoptedStyleSheets];
+    // 恢复样式时不要触发页面自己的过渡动画（否则会从浅色渐变回深色，看起来闪一下）
+    const hold = !html.hasAttribute('data-drak-applying');
+    if (hold) html.setAttribute('data-drak-applying', '');
     html.setAttribute('data-drak-off', '');
     doc?.detach();
     let dark = false;
@@ -291,6 +289,7 @@ class DynamicSession {
     } finally {
       html.removeAttribute('data-drak-off');
       document.adoptedStyleSheets = saved;
+      if (hold) requestAnimationFrame(() => requestAnimationFrame(() => html.removeAttribute('data-drak-applying')));
     }
     return dark;
   }
@@ -513,6 +512,10 @@ class Drak {
   private t0 = performance.now();
   firstApplyMs = 0;
   private mql = window.matchMedia('(prefers-color-scheme: dark)');
+  private recheckTimer = 0;
+  private lastRecheck = 0;
+  private rechecks = 0;
+  private recheckMisses = 0;
 
   init(): void {
     // 先按默认设置立即开始（不等异步存储），读到真实设置后若有差异再重启
@@ -556,7 +559,10 @@ class Drak {
     });
     this.mql.addEventListener('change', () => {
       if (this.settings.followSystem) this.restart();
+      // 跟随系统的网站此时也切了主题
+      else this.scheduleRecheck();
     });
+    this.watchPageTheme();
     // 后台标签页的定时器会被浏览器推迟（休眠后更明显）：切回来时补一次判断
     document.addEventListener('visibilitychange', () => {
       if (document.hidden || !this.settings.scheduleEnabled || !this.settings.enabled) return;
@@ -602,6 +608,72 @@ class Drak {
     return this.cssDone.get(url);
   }
 
+  // ---- 网站自带暗色的持续识别 ----
+  // DOMContentLoaded 时量一次不够：很多网站的暗色主题由脚本在加载后才套上（读 localStorage、框架挂载），
+  // 用户也可能中途在网站里切换主题。这里在几个时机重新量：页面加载完成后、<html>/<body> 上出现像主题切换的属性变化、系统配色变化。
+
+  private watchPageTheme(): void {
+    const mo = new MutationObserver((recs) => {
+      for (const r of recs) {
+        const name = r.attributeName || '';
+        // 我们自己改写内联样式引起的变化不算
+        if (name === 'style' && this.session?.inline.wroteLast(r.target as Element)) continue;
+        if (themeAttrChanged(name, r.oldValue, (r.target as Element).getAttribute(name))) return this.scheduleRecheck();
+      }
+    });
+    const opts = { attributes: true, attributeOldValue: true };
+    mo.observe(html, opts);
+    const onReady = () => {
+      if (document.body) mo.observe(document.body, opts);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady, { once: true });
+    else onReady();
+    // 只在顶层页面做定时复查，子框架（广告等）数量多，不值得
+    if (!isTop) return;
+    const onLoad = () => {
+      window.setTimeout(() => this.recheckPageDark(), 1200);
+      // 慢一些的单页应用：第二次复查
+      window.setTimeout(() => this.recheckPageDark(), 4000);
+    };
+    if (document.readyState === 'complete') onLoad();
+    else window.addEventListener('load', onLoad, { once: true });
+  }
+
+  private scheduleRecheck(): void {
+    clearTimeout(this.recheckTimer);
+    // 等网站把主题切完（样式生效、过渡结束）再量；同时限制频率
+    const wait = Math.max(350, this.lastRecheck + 1500 - performance.now());
+    this.recheckTimer = window.setTimeout(() => this.recheckPageDark(), wait);
+  }
+
+  /** 重新判断页面自己是不是深色，并在“动态配色”与“自动跳过”之间切换 */
+  private recheckPageDark(): void {
+    if (!document.body || this.rechecks >= 30) return;
+    if (this.mode === 'off' && this.reason === 'page-already-dark') {
+      // 之前因为页面是深色而跳过：网站切回浅色了就重新接管
+      this.rechecks++;
+      this.lastRecheck = performance.now();
+      if (!pageLooksDark(this.rule().ignore.join(','))) this.restart();
+      return;
+    }
+    const session = this.session;
+    if (this.mode !== 'dynamic' || !session || !session.readyAt || this.nativeProbing) return;
+    if (this.guard.tripped || this.recheckMisses >= 2) return;
+    const rule = session.ctx.rule;
+    // 走站点规则原生暗色流程的网站（知乎等）由那套流程自己判断
+    if (rule.native) return;
+    this.rechecks++;
+    this.lastRecheck = performance.now();
+    if (!this.guard.run('recheck', () => session.pageAlreadyDark())) return;
+    // 初筛认为页面已是深色：彻底撤掉（包括内联样式）再确认一次，仍是深色才真的让位
+    this.turnOff('page-already-dark');
+    if (!pageLooksDark(rule.ignore.join(','))) {
+      // 初筛误报（深色其实是我们改出来的）：恢复动态配色，并且不再反复折腾这个页面
+      this.recheckMisses++;
+      this.restart();
+    }
+  }
+
   private ruleSrc: string | null = null;
   private ruleMemo!: EffectiveRule;
 
@@ -630,7 +702,7 @@ class Drak {
       s.imageBrightness,
       s.dimImages,
       s.scheduleEnabled && [s.scheduleStart, s.scheduleEnd],
-      siteModeFor(s, host),
+      siteModeFor(s, site),
       rule,
     ]);
   }
@@ -651,7 +723,7 @@ class Drak {
     const s = this.settings;
     this.armSchedule();
     if (!s.enabled) return this.turnOff('disabled');
-    const siteMode = siteModeFor(s, host);
+    const siteMode = siteModeFor(s, site);
     if (siteMode === 'off') return this.turnOff('site-disabled');
     if (s.followSystem && !this.mql.matches) return this.turnOff('system-light');
     if (!scheduleActive(s)) return this.turnOff('scheduled-off');

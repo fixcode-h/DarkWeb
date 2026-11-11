@@ -8,9 +8,12 @@ import {
   CACHE_PREFIX,
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
+  excludePatternsFor,
   msToNextScheduleEdge,
   normalizeSettings,
   scheduleActive,
+  siteKeyOf,
+  siteModeFor,
   type Settings,
 } from '../shared/settings';
 
@@ -28,8 +31,7 @@ async function getSettings(): Promise<Settings> {
 function excludeFor(s: Settings): string[] {
   const out: string[] = [];
   for (const [h, m] of Object.entries(s.siteModes)) {
-    if (m !== 'off' || !/^[a-z0-9.-]+$/i.test(h)) continue;
-    out.push(`*://${h}/*`, `*://*.${h}/*`);
+    if (m === 'off') out.push(...excludePatternsFor(h));
   }
   return out;
 }
@@ -247,14 +249,16 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
 
 // ---- 快捷键：开关当前站点 ----
 
-export async function toggleSite(hostname: string): Promise<Settings> {
+/** url 可以是整条网址或 host[:port]；按站点键（域名 / IP:端口）开关，不区分具体页面 */
+export async function toggleSite(url: string): Promise<Settings> {
   const s = await getSettings();
-  const h = hostname.replace(/^www\./, '');
-  const cur = s.siteModes[h] ?? s.siteModes[hostname];
+  const key = siteKeyOf(url);
+  if (!key) return s;
   const next = { ...s, siteModes: { ...s.siteModes } };
-  delete next.siteModes[hostname];
-  if (cur === 'off') delete next.siteModes[h];
-  else next.siteModes[h] = 'off';
+  // 当前生效的是“关闭”（可能来自上级域名）时，这个键恢复自动；否则关闭
+  if (siteModeFor(s, key) === 'off' && s.siteModes[key] !== undefined) delete next.siteModes[key];
+  else if (siteModeFor(s, key) === 'off') next.siteModes[key] = 'dynamic';
+  else next.siteModes[key] = 'off';
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
   return next;
 }
@@ -272,10 +276,9 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (command !== 'toggle-site') return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.url || !/^https?:/.test(tab.url)) return;
-  const host = new URL(tab.url).hostname;
-  const s = await toggleSite(host);
+  const s = await toggleSite(tab.url);
   // 重新开启时，当前页面没有注入过脚本，需要补注入
-  if (s.siteModes[host.replace(/^www\./, '')] !== 'off' && tab.id !== undefined) await injectInto(tab.id);
+  if (siteModeFor(s, tab.url) !== 'off' && tab.id !== undefined) await injectInto(tab.id);
 });
 
 async function injectInto(tabId: number): Promise<void> {
