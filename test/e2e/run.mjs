@@ -368,6 +368,12 @@ async function main() {
       const r = await page.evaluate(() => ({ body: window.__t.info(document.body).bgLum, border: window.__t.borderContrast(document.querySelector('#p')) }));
       check('通用页面：深色且分割线可见', r.body < 0.03 && r.border >= 1.5, `${r.body.toFixed(4)} / ${r.border.toFixed(2)}`);
       await page.close();
+      const modern = await open(`http://127.0.0.1:${port}/modern`, 1500);
+      for (const [id, name] of [['tw', 'Tailwind v3 透明度变量'], ['ok', 'oklch()'], ['sh', 'shadcn 通道变量'], ['sha', 'shadcn 通道变量 + 透明度'], ['ge', 'Geist 通道变量'], ['twc', 'Tailwind 通道变量'], ['gd', '防盗链 CDN 的样式表']]) {
+        const m = await modern.evaluate((i) => window.__t.info(document.getElementById(i)), id);
+        check(`新式写法：${name}已转换`, m.bgLum < 0.03 && m.contrast >= 4.5, `${m.raw} / ${m.contrast.toFixed(2)}`);
+      }
+      await modern.close();
       const dark = await open(`http://127.0.0.1:${port}/darksite`, 800);
       const d = await diag(dark);
       check('本来就是深色的网站自动跳过', d.mode === 'off' && d.reason === 'page-already-dark', `${d.mode}/${d.reason}`);

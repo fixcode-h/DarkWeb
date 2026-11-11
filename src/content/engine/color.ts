@@ -144,13 +144,14 @@ export function parseColor(input: string): RGBA | null {
   if (s[0] === '#') return parseHex(s);
   const named = NAMED_HEX[s];
   if (named) return parseHex(named);
-  const m = /^(rgba?|hsla?)\((.*)\)$/.exec(s);
+  const m = /^(rgba?|hsla?|hwb|oklch|oklab|lch|lab)\((.*)\)$/.exec(s);
   if (!m) return null;
   if (m[2].includes('var(') || m[2].includes('calc(') || m[2].includes('from ')) return null;
   const args = splitArgs(m[2]);
   if (!args || args.length < 3 || args.length > 4) return null;
   const alpha = parseAlpha(args[3]);
   if (alpha === null) return null;
+  if (m[1] !== 'rgb' && m[1] !== 'rgba' && m[1] !== 'hsl' && m[1] !== 'hsla') return parseModern(m[1], args, alpha);
   if (m[1].startsWith('rgb')) {
     const r = parseNumberOrPercent(args[0], 255);
     const g = parseNumberOrPercent(args[1], 255);
@@ -167,6 +168,76 @@ export function parseColor(input: string): RGBA | null {
   const lv = args[2].endsWith('%') ? light : light / 100;
   const [r, g, b] = hslToRgb(h, clamp(sv, 0, 1), clamp(lv, 0, 1));
   return { r, g, b, a: alpha };
+}
+
+/** hwb() / oklch() / oklab() / lch() / lab()（Tailwind v4 等新框架大量使用） */
+function parseModern(fn: string, args: string[], a: number): RGBA | null {
+  if (fn === 'hwb') {
+    const h = parseHue(args[0]);
+    const w = parseNumberOrPercent(args[1], 1);
+    const bl = parseNumberOrPercent(args[2], 1);
+    if (h === null || w === null || bl === null) return null;
+    let W = args[1].endsWith('%') ? w : w / 100;
+    let B = args[2].endsWith('%') ? bl : bl / 100;
+    if (W + B >= 1) {
+      const g = (W / (W + B)) * 255;
+      return { r: g, g, b: g, a };
+    }
+    const [r, g, b] = hslToRgb(h, 1, 0.5);
+    const f = (v: number) => (v / 255) * (1 - W - B) * 255 + W * 255;
+    return { r: f(r), g: f(g), b: f(b), a };
+  }
+  if (fn === 'oklch' || fn === 'oklab') {
+    const L = parseNumberOrPercent(args[0], 1);
+    if (L === null) return null;
+    if (fn === 'oklch') {
+      const c = parseNumberOrPercent(args[1], 0.4);
+      const h = parseHue(args[2]);
+      if (c === null || h === null) return null;
+      return oklchToRgb({ l: L, c: Math.max(0, c), h, a });
+    }
+    const A = parseNumberOrPercent(args[1], 0.4);
+    const B = parseNumberOrPercent(args[2], 0.4);
+    if (A === null || B === null) return null;
+    let h = (Math.atan2(B, A) * 180) / Math.PI;
+    if (h < 0) h += 360;
+    return oklchToRgb({ l: L, c: Math.hypot(A, B), h, a });
+  }
+  // CIE Lab / LCH（D50）
+  const L = parseNumberOrPercent(args[0], 100);
+  if (L === null) return null;
+  let A: number, B: number;
+  if (fn === 'lch') {
+    const c = parseNumberOrPercent(args[1], 150);
+    const h = parseHue(args[2]);
+    if (c === null || h === null) return null;
+    A = Math.max(0, c) * Math.cos((h * Math.PI) / 180);
+    B = Math.max(0, c) * Math.sin((h * Math.PI) / 180);
+  } else {
+    const x = parseNumberOrPercent(args[1], 125);
+    const y = parseNumberOrPercent(args[2], 125);
+    if (x === null || y === null) return null;
+    A = x;
+    B = y;
+  }
+  return labToRgb(L, A, B, a);
+}
+
+function labToRgb(L: number, A: number, B: number, a: number): RGBA {
+  const k = 24389 / 27;
+  const e = 216 / 24389;
+  const fy = (L + 16) / 116;
+  const fx = fy + A / 500;
+  const fz = fy - B / 200;
+  const x = (fx ** 3 > e ? fx ** 3 : (116 * fx - 16) / k) * 0.3457 / 0.3585;
+  const y = L > k * e ? fy ** 3 : L / k;
+  const z = (fz ** 3 > e ? fz ** 3 : (116 * fz - 16) / k) * (1 - 0.3457 - 0.3585) / 0.3585;
+  // XYZ(D50) -> 线性 sRGB(D65)，含 Bradford 适配
+  const lr = 3.1341359569958707 * x - 1.6173863321612538 * y - 0.4906619460083532 * z;
+  const lg = -0.978795502912089 * x + 1.916254567259524 * y + 0.03344273116131949 * z;
+  const lb = 0.07195537988411677 * x - 0.2289768264158322 * y + 1.405386058324125 * z;
+  const to = (v: number) => clamp(linearToSrgb(clamp(v, 0, 1)), 0, 255);
+  return { r: to(lr), g: to(lg), b: to(lb), a };
 }
 
 // ---- sRGB <-> OKLab <-> OKLCH ----

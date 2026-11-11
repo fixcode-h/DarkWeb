@@ -2,7 +2,7 @@
  * 样式表级改写：遍历 CSSOM，为每条含颜色的规则生成同选择器、只含颜色属性的覆盖规则。
  * 覆盖规则放进紧跟在页面样式之后的可构造样式表里，优先级和层叠顺序与原页面一致。
  */
-import { rewriteValue, roleOfProperty, shadowVarName, stripUrl } from './css-value';
+import { channelVarCandidates, channelVarName, rewriteValue, roleOfProperty, shadowVarName, stripUrl } from './css-value';
 import type { ColorTransformer, Role } from './transform';
 
 const ROLES: Role[] = ['bg', 'fg', 'border', 'shadow'];
@@ -162,6 +162,13 @@ export class SheetRewriter {
           if (r.hits > 0) {
             out.push({ prop: shadowVarName(role, prop), value: r.text, important, original: value });
             this.stats.decls++;
+          }
+        }
+        // 只存通道的变量（`--background: 0 0% 100%`）：给 hsl(var(--background)) 这类使用处准备改写后的完整颜色
+        for (const [fn, color] of channelVarCandidates(value)) {
+          for (const role of ROLES) {
+            const t = this.tx.transform(color, role);
+            if (t) out.push({ prop: channelVarName(role, fn, prop), value: t, important, original: value });
           }
         }
         continue;

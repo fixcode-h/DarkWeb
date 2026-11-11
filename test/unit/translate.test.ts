@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIMITS, chunk, parseGoogle, parseLlm } from '../../src/translate/engines';
-import { engineLang, looksLikeTarget, sameLang, worthTranslating } from '../../src/translate/lang';
+import { engineLang, looksLikeIdentifier, looksLikeTarget, sameLang, worthTranslating } from '../../src/translate/lang';
 import { parseSites } from '../../src/translate/options';
 import { DEFAULT_TRANSLATE, normalizeTranslate, siteKeyOf } from '../../src/translate/settings';
 
@@ -38,6 +38,17 @@ describe('翻译：语言判断', () => {
   });
 });
 
+describe('翻译：标识符不翻', () => {
+  it('文件名、路径、域名、变量名', () => {
+    for (const t of ['.eslint-plugin-local', 'CONTRIBUTING.md', 'code.visualstudio.com', 'src/content', '@types/chrome', 'snake_case', 'visual-studio-code', 'useState', '1.145.3', '#344791'])
+      expect(looksLikeIdentifier(t), t).toBe(true);
+  });
+  it('普通词句照常翻译', () => {
+    for (const t of ['Products', 'Sign in', 'build', 'Read more', 'GitHub', "Don't", 'e.g. this'])
+      expect(looksLikeIdentifier(t), t).toBe(false);
+  });
+});
+
 describe('翻译：引擎', () => {
   it('按字符数和片段数切批，保持顺序', () => {
     const texts = ['a'.repeat(6), 'b'.repeat(6), 'c'.repeat(6), 'd'];
@@ -70,6 +81,11 @@ describe('翻译：设置', () => {
     expect(s.mode).toBe('replace');
     expect(s.autoSites).toEqual(['a.com']);
     expect(s.llm).toEqual({ ...DEFAULT_TRANSLATE.llm, apiKey: 'k' });
+  });
+  it('侧边按钮设置', () => {
+    expect(normalizeTranslate({}).fab).toEqual(DEFAULT_TRANSLATE.fab);
+    const f = normalizeTranslate({ fab: { enabled: false, side: 'top', y: 3, hiddenSites: ['a.com', 2] } }).fab;
+    expect(f).toEqual({ enabled: false, side: 'right', y: 0.95, hiddenSites: ['a.com'] });
   });
   it('站点按 域名 或 IP:端口 识别', () => {
     expect(siteKeyOf('www.Example.com')).toBe('example.com');

@@ -3,6 +3,7 @@
  * 负责模式选择、动态模式下各模块的调度、设置变化时的热切换、诊断信息。
  */
 import { BUILTIN_RULES } from '../shared/builtin-rules';
+import { fetchCssText } from '../shared/css-fetch';
 import type { Diagnostics, FetchCssResponse } from '../shared/messages';
 import { parseUserRules, resolveRule, type EffectiveRule } from '../shared/rules';
 import {
@@ -606,6 +607,12 @@ class Drak {
         .sendMessage({ type: 'fetch-css', url })
         .then((r: FetchCssResponse) => (r?.ok && typeof r.text === 'string' ? r.text : null))
         .catch(() => null)
+        // 后台拉取被防盗链拒绝时，以页面身份按 CORS 再试一次（带页面的 Referer）
+        .then((t) =>
+          t !== null
+            ? t
+            : fetchCssText(url, { mode: 'cors', credentials: 'omit' }).then((r) => (r.ok && typeof r.text === 'string' ? r.text : null)),
+        )
         .then((t) => {
           this.cssDone.set(url, t);
           // 预取完成时如果样式表已加载，立即改写
