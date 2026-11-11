@@ -6,7 +6,7 @@
 
 1. **注册开发者账号**。用 Google 账号打开[开发者后台](https://chrome.google.com/webstore/devconsole)，同意协议，支付一次性的 5 美元注册费。这个 Google 账号必须开启两步验证，否则不能发布。
 2. **完善账号信息**。在 Account 页填写发布者名称、验证联系邮箱，并按要求声明是否为“交易者”（个人免费扩展一般选非交易者）。
-3. **准备扩展包**。从 GitHub Releases 下载最新的 `drak-<版本>.zip`，或者本地运行 `BUILD_NUMBER=1 npm run build:release`，包在 `release/` 下。
+3. **准备扩展包**。本地运行 `BUILD_NUMBER=1 npm run build:release`，上传 `release/` 下文件名以 `-store.zip` 结尾的那个包。它和普通包的区别只是 manifest 里没有 `key`：`key` 用来让本地安装保持固定 ID，商店会用自己的密钥决定 ID，带着 `key` 上传可能被拒。
 4. **新建项目**。后台点 “New item”，上传 zip。
 5. **填写页面**。按 [listing.md](listing.md) 填 Store listing、Privacy、Distribution 三个页面，素材在 [assets/](assets/)。
 6. **提交审核**。点 “Submit for review”。本扩展申请了所有网站的访问权限，会进入更严格的人工审核，通常比普通扩展慢，可能需要几天到几周。审核结果会发到账号邮箱。
@@ -16,7 +16,7 @@
 
 ## 二、出新包自动同步
 
-`.github/workflows/release.yml` 在 `main` 有新提交时会构建、验收、发 GitHub Release，最后运行 `scripts/cws-publish.mjs` 把同一个 zip 上传到商店并提交审核。审核通过后自动上架，用户的浏览器会自动更新。
+`.github/workflows/release.yml` 在 `main` 有新提交时会构建、验收、发 GitHub Release，最后运行 `scripts/cws-publish.mjs` 把同一次构建的商店版 zip（`-store.zip`）上传到商店并提交审核。审核通过后自动上架，用户的浏览器会自动更新。
 
 没有配置下面的密钥时，这一步会直接跳过，不影响出包。
 

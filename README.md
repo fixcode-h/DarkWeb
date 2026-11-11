@@ -5,7 +5,7 @@
 ## 分支
 
 - `dev`：日常开发，推送后跑 CI（类型检查、单元测试、端到端验收）
-- `main`：发布分支，合并后 GitHub Actions 自动构建、验收并发布扩展包（Releases 里的 `drak-<版本>.zip`），配置密钥后还会同步到 Chrome 应用商店，见 [docs/store/README.md](docs/store/README.md)
+- `main`：发布分支，合并后 GitHub Actions 自动构建、验收并发布扩展包（Releases 里的 `drak-<版本>.zip`，发布说明会列出这个包相对上一个包的调整），配置密钥后还会同步到 Chrome 应用商店，见 [docs/store/README.md](docs/store/README.md)
 
 ## 本地开发
 
@@ -48,3 +48,10 @@ npm run test:e2e     # 构建后在本地仿真的知乎 / B 站页面上跑端�
 - 显示方式：双语对照（原文下方显示译文，默认）或仅显示译文；链接、加粗等行内格式保留，代码不翻译
 - 只翻译视口附近的内容，滚动和页面新增内容自动跟进；已是目标语言的段落跳过
 - “总是翻译此网站”按域名或 IP:端口识别，对该站点所有页面生效
+
+## 版本号与更新
+
+- 每次 `main` 出包，版本号自动递增：`<package.json 的 version>.<构建序号>`，例如 `0.1.0.7`。包名、Release 标题、扩展管理页里显示的版本都是这个号。要升 `0.2.0` 这样的大版本时改 `package.json` 的 `version`。
+- 每个 Release 的说明和包里的 `CHANGES.md` 会列出相对上一个包合并了哪些改动（取自 PR 标题，所以 PR 标题要写清楚改了什么）。
+- 扩展 ID 是固定的（manifest 里的 `key`），本地安装新包会覆盖旧版并保留设置，不会多出一个扩展。更新方法：把新的 zip 解压到**同一个文件夹**覆盖旧文件，在 `chrome://extensions` 点扩展卡片上的刷新按钮；或者直接把新 zip 拖进 `chrome://extensions`。
+- 以前装过没有固定 ID 的旧包的话，它不会被覆盖，需要手动移除一次。

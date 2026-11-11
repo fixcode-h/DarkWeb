@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 发布说明要对比上一个发布标签，需要完整历史和标签
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,29 +30,33 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Resolve version
+        # 版本号 = package.json 的 version + 构建序号（如 0.1.0.42），每出一个包自动递增，
+        # 也满足商店“每次上传版本号必须更大”的要求
+        id: meta
+        run: |
+          VERSION="$(node -p "require('./package.json').version").$GITHUB_RUN_NUMBER"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Release notes
+        # 列出这个包相对上一个包合并了哪些改动；同一份说明也会放进 zip（CHANGES.md）
+        run: node scripts/release-notes.mjs "${{ steps.meta.outputs.version }}" release/notes.md
       - name: Build package
-        # 版本号带上构建序号（如 0.1.0.42），保证每次上传商店的版本都比上一次大
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: npm run build:release
-      - name: Resolve tag
-        id: meta
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION-build.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: drak-${{ steps.meta.outputs.version }}
-          path: release/*.zip
+          path: release/drak-${{ steps.meta.outputs.version }}.zip
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ steps.meta.outputs.tag }}" release/drak-${{ steps.meta.outputs.version }}.zip \
             --target "$GITHUB_SHA" \
-            --title "Drak ${{ steps.meta.outputs.version }}（build ${{ github.run_number }}）" \
-            --notes "由 main 分支提交 ${GITHUB_SHA::7} 自动构建。下载 zip 解压后，在 chrome://extensions 打开开发者模式，选择“加载已解压的扩展程序”。"
+            --title "Drak ${{ steps.meta.outputs.version }}" \
+            --notes-file release/notes.md
       - name: Sync to Chrome Web Store
         # 没配置密钥时脚本会直接跳过；配置方法见 docs/store/README.md
         env:
@@ -60,4 +67,5 @@ jobs:
           CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
           CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
           CWS_PUBLISH: ${{ vars.CWS_PUBLISH }}
-        run: node scripts/cws-publish.mjs release/drak-${{ steps.meta.outputs.version }}.zip
+        # 上传不带 key 的商店版
+        run: node scripts/cws-publish.mjs release/drak-${{ steps.meta.outputs.version }}-store.zip
