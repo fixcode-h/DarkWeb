@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIMITS, chunk, parseGoogle, parseLlm } from '../../src/translate/engines';
-import { engineLang, looksLikeTarget, sameLang, worthTranslating } from '../../src/translate/lang';
+import { engineLang, looksLikeIdentifier, looksLikeTarget, sameLang, worthTranslating } from '../../src/translate/lang';
 import { parseSites } from '../../src/translate/options';
 import { DEFAULT_TRANSLATE, normalizeTranslate, siteKeyOf } from '../../src/translate/settings';
 
@@ -35,6 +35,17 @@ describe('翻译：语言判断', () => {
     expect(engineLang('deepl', 'en')).toBe('EN-US');
     expect(engineLang('deepl', 'ja')).toBe('JA');
     expect(engineLang('llm', 'zh-CN')).toBe('简体中文');
+  });
+});
+
+describe('翻译：标识符不翻', () => {
+  it('文件名、路径、域名、变量名', () => {
+    for (const t of ['.eslint-plugin-local', 'CONTRIBUTING.md', 'code.visualstudio.com', 'src/content', '@types/chrome', 'snake_case', 'visual-studio-code', 'useState', '1.145.3', '#344791'])
+      expect(looksLikeIdentifier(t), t).toBe(true);
+  });
+  it('普通词句照常翻译', () => {
+    for (const t of ['Products', 'Sign in', 'build', 'Read more', 'GitHub', "Don't", 'e.g. this'])
+      expect(looksLikeIdentifier(t), t).toBe(false);
   });
 });
 

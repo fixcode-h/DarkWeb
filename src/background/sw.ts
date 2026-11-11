@@ -3,6 +3,7 @@
  */
 import { classify, classifySvgText, computeStats, type ImageClass } from '../shared/image-stats';
 import type { AnalyzeResponse, FetchCssResponse, InvertResponse, Request } from '../shared/messages';
+import { fetchCssText, fetchWithLimit } from '../shared/css-fetch';
 import '../translate/background';
 import {
   CACHE_PREFIX,
@@ -17,11 +18,9 @@ import {
   type Settings,
 } from '../shared/settings';
 
-const MAX_CSS_BYTES = 4 * 1024 * 1024;
 const MAX_IMG_BYTES = 2 * 1024 * 1024;
 const MAX_INVERT_DIM = 512;
 const MAX_DATA_URL = 128 * 1024;
-const FETCH_TIMEOUT = 8000;
 
 async function getSettings(): Promise<Settings> {
   const data = await chrome.storage.local.get(SETTINGS_KEY);
@@ -127,50 +126,14 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // ---- 资源代理 ----
 
-async function fetchWithLimit(url: string, maxBytes: number): Promise<Response> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal, credentials: 'include', cache: 'force-cache' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const len = Number(res.headers.get('content-length') || 0);
-    if (len > maxBytes) throw new Error('too large');
-    return res;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function fetchCss(url: string): Promise<FetchCssResponse> {
-  if (!/^https?:/i.test(url)) return { ok: false, error: 'bad url' };
-  try {
-    const res = await fetchWithLimit(url, MAX_CSS_BYTES);
-    let text = await res.text();
-    if (text.length > MAX_CSS_BYTES) return { ok: false, error: 'too large' };
-    // 展开一层 @import（构造样式表不支持 @import）
-    const imports = Array.from(text.matchAll(/@import\s+(?:url\()?\s*["']?([^"')\s;]+)["']?\s*\)?([^;]*);/g));
-    for (const m of imports.slice(0, 10)) {
-      try {
-        const child = new URL(m[1], url).href;
-        const r = await fetchWithLimit(child, MAX_CSS_BYTES);
-        let t = await r.text();
-        const media = m[2].trim();
-        if (media && !/^layer/.test(media)) t = `@media ${media} {\n${t}\n}`;
-        text = t + '\n' + text;
-      } catch {
-        /* 子表失败就跳过 */
-      }
-    }
-    return { ok: true, text };
-  } catch (e) {
-    return { ok: false, error: String(e) };
-  }
+  return fetchCssText(url, { credentials: 'include', cache: 'force-cache' });
 }
 
 const imageCache = new Map<string, Promise<ImageClass>>();
 
 async function loadImage(url: string): Promise<{ blob: Blob; svg: string | null }> {
-  const res = await fetchWithLimit(url, MAX_IMG_BYTES);
+  const res = await fetchWithLimit(url, MAX_IMG_BYTES, { credentials: 'include', cache: 'force-cache' });
   const blob = await res.blob();
   if (blob.size > MAX_IMG_BYTES) throw new Error('too large');
   const isSvg = /svg/i.test(blob.type) || /\.svg(\?|#|$)/i.test(url);
