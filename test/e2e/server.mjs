@@ -90,6 +90,33 @@ export function startServer() {
       if (host === 's1.hdslb.com' && url.pathname === '/bili.css') return send('text/css', readFileSync(join(dir, 'bili.css')));
       if (host.endsWith('zhihu.com') && (url.pathname === '/' || url.pathname.startsWith('/explore'))) return page('zhihu.html');
       if (host.endsWith('bilibili.com') && url.pathname === '/') return page('bilibili.html');
+      // 有防盗链的 CDN：不带页面 Referer（扩展后台直接拉取）时返回 403
+      if (host === 's2.hdslb.com' && url.pathname === '/guard.css') {
+        if (!(req.headers.referer || '').startsWith('http://127.0.0.1:')) {
+          res.writeHead(403, { 'content-type': 'text/html' });
+          return res.end('<h1>403 Forbidden</h1>');
+        }
+        return send('text/css', '.gd{background:#f7f7f9;color:#000;padding:8px}');
+      }
+      // 新式写法：Tailwind v3 透明度变量、oklch()、shadcn/ui 与 Vercel Geist 的通道变量
+      if (url.pathname === '/modern') {
+        const css = [
+          ':root{--background:0 0% 100%;--foreground:222.2 84% 4.9%;--v:0, 0%, 98%;--fv:0, 0%, 9%;--bg2:hsla(var(--v), 1);--fg2:hsla(var(--fv), 1);--c:255 255 255}',
+          'body{margin:0;background:#fff;color:#222}div{padding:8px}',
+          '.tw{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity));--tw-text-opacity:1;color:rgb(35 39 47/var(--tw-text-opacity))}',
+          '.ok{background:oklch(0.985 0.002 247.839);color:oklch(0.21 0.034 264.665)}',
+          '.sh{background:hsl(var(--background));color:hsl(var(--foreground))}',
+          '.sha{background:hsl(var(--background) / 0.95);color:hsl(var(--foreground))}',
+          '.ge{background:var(--bg2);color:var(--fg2)}',
+          '.twc{--tw-bg-opacity:1;background:rgb(var(--c) / var(--tw-bg-opacity));color:#111}',
+        ].join('');
+        return send(
+          'text/html; charset=utf-8',
+          `<!doctype html><html><head><style>${css}</style><link rel="stylesheet" href="http://s2.hdslb.com:${port}/guard.css"></head><body>` +
+            '<div class="tw" id="tw">Tailwind v3</div><div class="ok" id="ok">oklch</div><div class="sh" id="sh">shadcn</div><div class="sha" id="sha">shadcn 半透明</div>' +
+            '<div class="ge" id="ge">Geist</div><div class="twc" id="twc">Tailwind 通道变量</div><div class="gd" id="gd">防盗链 CDN 样式表</div></body></html>',
+        );
+      }
       if (url.pathname === '/plain') {
         return send('text/html; charset=utf-8', '<!doctype html><html><head><style>body{background:#fff;color:#222}p{border-bottom:1px solid #eee}</style></head><body><p id="p">普通网站</p></body></html>');
       }

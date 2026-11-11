@@ -86,3 +86,18 @@ export function looksLikeTarget(text: string, target: string): boolean {
 export function worthTranslating(text: string): boolean {
   return count(text, LETTER) >= 2;
 }
+
+/**
+ * 文件名、路径、域名、变量名这类“标识符”不翻：GitHub 文件列表里 `.eslint-plugin-local`、`CONTRIBUTING.md`
+ * 翻成“.eslint-插件-本地”只会添乱。只看不含空白的单个词。
+ */
+export function looksLikeIdentifier(text: string): boolean {
+  const t = text.trim();
+  if (!t || /\s/.test(t)) return false;
+  if (/^[.@#$~]/.test(t)) return true; // .github、@scope/pkg、#123、$HOME、~/foo
+  if (/[/\\_]/.test(t)) return true; // 路径、snake_case
+  if (/^[\w-]+(\.[\w-]+)+$/.test(t)) return true; // 文件名、域名、版本号
+  if (/^[a-z0-9]+(-[a-z0-9]+)+$/.test(t)) return true; // kebab-case
+  if (/^[a-z]+[A-Z][A-Za-z0-9]*$/.test(t)) return true; // camelCase
+  return false;
+}
