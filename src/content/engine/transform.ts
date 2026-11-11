@@ -13,13 +13,48 @@ export interface Theme {
   borderMin: number;
   borderMax: number;
   gamma: number;
+  /** 中性色（背景、边框）染上的色相与彩度；彩度为 0 表示不染色 */
+  tintHue: number;
+  tintChroma: number;
+  /** 中性文字染上的彩度 */
+  fgTintChroma: number;
+  /** 输出彩度的缩放，1 为保持原样 */
+  sat: number;
 }
+
+export type ThemePreset = 'default' | 'black' | 'soft' | 'warm' | 'blue';
+
+interface Preset {
+  /** brightness=0 时页面底色的亮度 */
+  bgBase: number;
+  /** brightness 0-100 能再抬高多少 */
+  bgSpan: number;
+  hue: number;
+  chroma: number;
+  fgChroma: number;
+}
+
+export const THEME_PRESETS: Record<ThemePreset, Preset> = {
+  default: { bgBase: 0.16, bgSpan: 0.08, hue: 0, chroma: 0, fgChroma: 0 },
+  // 纯黑：默认亮度下白底直接映射到 #000，适合 OLED 屏；层级靠 γ 曲线拉开
+  black: { bgBase: -0.04, bgSpan: 0.08, hue: 0, chroma: 0, fgChroma: 0 },
+  // 柔和灰：底色更亮，明暗反差小
+  soft: { bgBase: 0.25, bgSpan: 0.08, hue: 0, chroma: 0, fgChroma: 0 },
+  // 暖色护眼：棕调底色 + 米色文字，减少蓝光
+  warm: { bgBase: 0.19, bgSpan: 0.08, hue: 65, chroma: 0.018, fgChroma: 0.03 },
+  // 午夜蓝
+  blue: { bgBase: 0.17, bgSpan: 0.08, hue: 260, chroma: 0.03, fgChroma: 0.015 },
+};
 
 export interface ThemeOptions {
   /** 0-100，默认 50：背景亮度 */
   brightness: number;
   /** 0-100，默认 50：文字亮度/对比度 */
   contrast: number;
+  /** 配色主题，默认 'default' */
+  theme?: ThemePreset;
+  /** 0-100，默认 50：色彩饱和度 */
+  saturation?: number;
 }
 
 export const DEFAULT_THEME_OPTIONS: ThemeOptions = { brightness: 50, contrast: 50 };
@@ -27,7 +62,9 @@ export const DEFAULT_THEME_OPTIONS: ThemeOptions = { brightness: 50, contrast: 5
 export function buildTheme(opts: ThemeOptions = DEFAULT_THEME_OPTIONS): Theme {
   const b = clamp(opts.brightness, 0, 100) / 100;
   const c = clamp(opts.contrast, 0, 100) / 100;
-  const bgMin = 0.16 + 0.08 * b; // 默认 0.20
+  const p = THEME_PRESETS[opts.theme ?? 'default'] ?? THEME_PRESETS.default;
+  const s = clamp(opts.saturation ?? 50, 0, 100);
+  const bgMin = Math.max(0, p.bgBase + p.bgSpan * b); // 默认 0.20
   const bgMax = bgMin + 0.19; // 默认 0.39
   const fgMax = 0.85 + 0.12 * c; // 默认 0.91
   // 保证最亮背景 + 最暗文字仍有 >= 4.5:1
@@ -37,9 +74,15 @@ export function buildTheme(opts: ThemeOptions = DEFAULT_THEME_OPTIONS): Theme {
     bgMax,
     fgMin: Math.min(fgMin, fgMax),
     fgMax,
-    borderMin: bgMin + 0.13,
-    borderMax: bgMin + 0.38,
+    // 纯黑主题下底色亮度为 0，边框至少要到 0.28 才看得见
+    borderMin: Math.max(bgMin + 0.13, 0.28),
+    borderMax: Math.max(bgMin + 0.38, 0.5),
     gamma: 0.6,
+    tintHue: p.hue,
+    tintChroma: p.chroma,
+    fgTintChroma: p.fgChroma,
+    // 0 -> 灰度，50 -> 原样，100 -> 1.4 倍
+    sat: s <= 50 ? s / 50 : 1 + ((s - 50) / 50) * 0.4,
   };
 }
 
@@ -73,6 +116,18 @@ function compositeOnWhite(L: number, a: number): number {
 }
 
 export function transformOklch(o: OKLCH, role: Role, t: Theme): OKLCH {
+  const out = mapRole(o, role, t);
+  if (t.sat !== 1) out.c *= t.sat;
+  // 主题染色：只动接近中性的颜色，品牌色和强调色不受影响
+  const tint = role === 'fg' ? t.fgTintChroma : role === 'shadow' ? 0 : t.tintChroma;
+  if (tint > 0 && out.c < tint) {
+    out.c = tint;
+    out.h = t.tintHue;
+  }
+  return out;
+}
+
+function mapRole(o: OKLCH, role: Role, t: Theme): OKLCH {
   const { l, c, h, a } = o;
   switch (role) {
     case 'bg': {

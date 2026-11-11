@@ -40,8 +40,8 @@ function findZip() {
   const arg = process.argv[2];
   if (arg) return resolve(arg);
   const dir = join(root, 'release');
-  const zips = readdirSync(dir).filter((f) => f.endsWith('.zip'));
-  if (zips.length !== 1) throw new Error(`release/ 里应当只有一个 zip，实际有 ${zips.length} 个；请把路径作为参数传入`);
+  const zips = readdirSync(dir).filter((f) => f.endsWith('-store.zip'));
+  if (zips.length !== 1) throw new Error(`release/ 里应当只有一个 *-store.zip，实际有 ${zips.length} 个；请把路径作为参数传入`);
   return join(dir, zips[0]);
 }
 
