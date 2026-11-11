@@ -7,61 +7,92 @@
 </head>
 <body class="popup">
   <header>
-    <div class="brand"><img src="icons/icon-32.png" alt="" width="20" height="20" /> Drak 暗色模式</div>
-    <label class="switch" title="全局开关"><input type="checkbox" id="enabled" /><span></span></label>
+    <div class="brand">
+      <img src="icons/icon-48.png" alt="" width="26" height="26" />
+      <div>
+        <div class="brand-name">Drak 暗色模式</div>
+        <div class="brand-sub" id="globalState"></div>
+      </div>
+    </div>
+    <label class="switch" title="全局开关（Alt+Shift+A）"><input type="checkbox" id="enabled" /><span></span></label>
   </header>
 
-  <section class="site">
-    <div class="host" id="host">—</div>
-    <label class="row">
-      <span>本站模式</span>
-      <select id="siteMode">
-        <option value="auto">自动（推荐）</option>
-        <option value="dynamic">动态配色</option>
-        <option value="native">站点原生暗色</option>
-        <option value="filter">滤镜反色（兜底）</option>
-        <option value="off">本站关闭</option>
-      </select>
-    </label>
-    <div class="status" id="status"></div>
-  </section>
+  <main id="main">
+    <section class="card site">
+      <div class="site-head">
+        <span class="dot" id="dot"></span>
+        <span class="host" id="host">—</span>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="seg" id="siteMode" role="radiogroup" aria-label="本站模式">
+        <button type="button" role="radio" data-mode="auto" title="按站点规则自动选择（推荐）">自动</button>
+        <button type="button" role="radio" data-mode="dynamic" title="按颜色角色重新配色">动态</button>
+        <button type="button" role="radio" data-mode="native" title="使用网站自带的暗色主题">原生</button>
+        <button type="button" role="radio" data-mode="filter" title="整页滤镜反色，兜底方案">滤镜</button>
+        <button type="button" role="radio" data-mode="off" title="本站不启用（Alt+Shift+D）">关闭</button>
+      </div>
+    </section>
 
-  <section>
-    <label class="row"><span>背景亮度</span><input type="range" id="brightness" min="0" max="100" /></label>
-    <label class="row"><span>文字对比度</span><input type="range" id="contrast" min="0" max="100" /></label>
-    <label class="row check"><input type="checkbox" id="dimImages" /><span>白底截图、图表降低亮度</span></label>
-    <label class="row check"><input type="checkbox" id="followSystem" /><span>只在系统为深色时启用</span></label>
-  </section>
+    <section class="card">
+      <h2>外观</h2>
+      <div id="appearance"></div>
+    </section>
 
-  <section id="trBox">
-    <div class="row">
-      <strong>网页翻译</strong>
-      <button id="trToggle" class="primary" type="button">翻译此页面</button>
-    </div>
-    <label class="row"><span>目标语言</span><select id="trTarget"></select></label>
-    <label class="row"><span>翻译引擎</span><select id="trEngine"></select></label>
-    <label class="row">
-      <span>显示方式</span>
-      <select id="trMode">
-        <option value="bilingual">双语对照</option>
-        <option value="replace">仅显示译文</option>
-      </select>
-    </label>
-    <label class="row check"><input type="checkbox" id="trAuto" /><span>总是翻译此网站</span></label>
-    <div class="row">
-      <span class="status" id="trStatus"></span>
-      <a href="#" id="trOptions">翻译设置</a>
-    </div>
-  </section>
+    <section class="card">
+      <h2>选项</h2>
+      <label class="opt">
+        <span>白底截图、图表降低亮度</span>
+        <span class="switch small"><input type="checkbox" id="dimImages" /><span></span></span>
+      </label>
+      <label class="opt">
+        <span>只在系统为深色时启用</span>
+        <span class="switch small"><input type="checkbox" id="followSystem" /><span></span></span>
+      </label>
+      <label class="opt">
+        <span>定时启用</span>
+        <span class="switch small"><input type="checkbox" id="scheduleEnabled" /><span></span></span>
+      </label>
+      <div class="times" id="times" hidden>
+        <input type="time" id="scheduleStart" aria-label="开始时间" />
+        <span>至</span>
+        <input type="time" id="scheduleEnd" aria-label="结束时间" />
+        <span class="hint" id="scheduleHint"></span>
+      </div>
+    </section>
 
-  <details id="diagBox">
-    <summary>诊断信息</summary>
-    <pre id="diag"></pre>
-    <button id="copyDiag" type="button">复制诊断信息</button>
-  </details>
+    <section class="card tr" id="trBox">
+      <div class="tr-head">
+        <h2>网页翻译</h2>
+        <button id="trToggle" class="primary" type="button">翻译此页面</button>
+      </div>
+      <label class="field"><span>目标语言</span><select id="trTarget"></select></label>
+      <label class="field"><span>翻译引擎</span><select id="trEngine"></select></label>
+      <label class="field">
+        <span>显示方式</span>
+        <select id="trMode">
+          <option value="bilingual">双语对照</option>
+          <option value="replace">仅显示译文</option>
+        </select>
+      </label>
+      <label class="opt">
+        <span>总是翻译此网站</span>
+        <span class="switch small"><input type="checkbox" id="trAuto" /><span></span></span>
+      </label>
+      <div class="tr-foot">
+        <span class="hint" id="trStatus"></span>
+        <a href="#" id="trOptions">翻译设置</a>
+      </div>
+    </section>
+
+    <details id="diagBox">
+      <summary>诊断信息</summary>
+      <pre id="diag"></pre>
+      <button id="copyDiag" type="button">复制诊断信息</button>
+    </details>
+  </main>
 
   <footer>
-    <span class="hint">快捷键 Alt+Shift+D 开关本站</span>
+    <span class="hint"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>D</kbd> 开关本站 · <kbd>T</kbd> 翻译</span>
     <a href="#" id="openOptions">规则与设置</a>
   </footer>
   <script src="popup.js"></script>

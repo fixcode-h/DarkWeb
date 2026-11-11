@@ -9,12 +9,16 @@
   "background": { "service_worker": "sw.js", "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "Drak 暗色模式", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
   "options_page": "options.html",
-  "permissions": ["storage", "unlimitedStorage", "scripting", "activeTab", "tabs", "contextMenus"],
+  "permissions": ["storage", "unlimitedStorage", "scripting", "activeTab", "tabs", "alarms", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "commands": {
     "toggle-site": {
       "suggested_key": { "default": "Alt+Shift+D" },
       "description": "开关当前网站的暗色模式"
+    },
+    "toggle-global": {
+      "suggested_key": { "default": "Alt+Shift+A" },
+      "description": "全局开关暗色模式"
     },
     "toggle-translate": {
       "suggested_key": { "default": "Alt+Shift+T" },

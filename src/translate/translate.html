@@ -4,73 +4,73 @@
   <meta charset="utf-8" />
   <title>Drak 翻译设置</title>
   <link rel="stylesheet" href="ui.css" />
-  <style>
-    input[type=text], input[type=password] {
-      background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
-      font: inherit; padding: 4px 8px; width: 360px; max-width: 100%;
-    }
-    section .row select { width: 360px; max-width: 100%; }
-    section .row { flex-wrap: wrap; }
-    #autoSites { min-height: 120px; }
-    .sample { border: 1px dashed var(--line); border-radius: 6px; padding: 10px 12px; margin-top: 8px; }
-  </style>
 </head>
 <body class="options">
-  <h1>Drak 翻译设置</h1>
-  <p>在弹窗里点“翻译此页面”，或按 Alt+Shift+T，或在页面上右键选择“翻译此页面 / 显示原文”。</p>
-
-  <h2>翻译</h2>
-  <section>
-    <label class="row"><span>翻译引擎</span><select id="engine"></select></label>
-    <label class="row"><span>目标语言</span><select id="target"></select></label>
-    <label class="row check"><input type="checkbox" id="fallback" /><span>所选引擎不可用时，自动改用另一个免费引擎（Google 与微软互为备用）</span></label>
-    <div class="actions">
-      <button id="test" type="button">测试当前引擎</button>
-      <span id="testResult" class="hint"></span>
+  <header class="page-head">
+    <img src="icons/icon-128.png" alt="" width="40" height="40" />
+    <div>
+      <h1>网页翻译</h1>
+      <p>在弹窗里点“翻译此页面”，或按 <kbd>Alt</kbd><kbd>Shift</kbd><kbd>T</kbd>，或在页面上右键选择“翻译此页面 / 显示原文”。改动自动保存。</p>
     </div>
+    <span id="saved" class="ok"></span>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>翻译</h2>
+      <label class="field"><span>翻译引擎</span><select id="engine"></select></label>
+      <label class="field"><span>目标语言</span><select id="target"></select></label>
+      <label class="opt">
+        <span>引擎不可用时自动换用备用引擎<small>Google 与微软互为备用</small></span>
+        <span class="switch small"><input type="checkbox" id="fallback" /><span></span></span>
+      </label>
+      <div class="tr-foot">
+        <button id="test" type="button">测试当前引擎</button>
+        <span id="testResult" class="hint"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>显示</h2>
+      <label class="field">
+        <span>显示方式</span>
+        <select id="mode">
+          <option value="bilingual">双语对照（原文下方显示译文）</option>
+          <option value="replace">仅显示译文（替换原文）</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>双语译文样式</span>
+        <select id="style">
+          <option value="dim">弱化（稍淡）</option>
+          <option value="plain">与原文相同</option>
+          <option value="underline">虚线下划线</option>
+          <option value="highlight">浅色底纹</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>DeepL</h2>
+      <p>需要自己的 DeepL API 密钥（免费版密钥以 <code>:fx</code> 结尾，会自动使用免费版接口）。</p>
+      <label class="field"><span>API 密钥</span><input type="password" id="deeplKey" autocomplete="off" /></label>
+    </section>
+
+    <section class="card">
+      <h2>AI 大模型</h2>
+      <p>任何兼容 OpenAI chat/completions 的接口都可以用。译文通常最自然，但更慢，并按接口方的价格计费。</p>
+      <label class="field"><span>接口地址</span><input type="text" id="llmBase" placeholder="https://api.openai.com/v1" /></label>
+      <label class="field"><span>API 密钥</span><input type="password" id="llmKey" autocomplete="off" /></label>
+      <label class="field"><span>模型</span><input type="text" id="llmModel" /></label>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>总是翻译的网站</h2>
+    <p>每行一个域名或 IP:端口（例如 news.ycombinator.com、192.168.1.10:8080），也可以直接粘贴完整网址。打开这些网站的任何页面时自动翻译。</p>
+    <textarea id="autoSites" spellcheck="false" rows="6"></textarea>
   </section>
 
-  <h2>显示</h2>
-  <section>
-    <label class="row">
-      <span>显示方式</span>
-      <select id="mode">
-        <option value="bilingual">双语对照（原文下方显示译文）</option>
-        <option value="replace">仅显示译文（替换原文）</option>
-      </select>
-    </label>
-    <label class="row">
-      <span>双语对照时译文的样式</span>
-      <select id="style">
-        <option value="dim">弱化（稍淡）</option>
-        <option value="plain">与原文相同</option>
-        <option value="underline">虚线下划线</option>
-        <option value="highlight">浅色底纹</option>
-      </select>
-    </label>
-  </section>
-
-  <h2>DeepL</h2>
-  <section>
-    <p>需要自己的 DeepL API 密钥（免费版密钥以 :fx 结尾，会自动使用免费版接口）。</p>
-    <label class="row"><span>API 密钥</span><input type="password" id="deeplKey" autocomplete="off" /></label>
-  </section>
-
-  <h2>AI 大模型</h2>
-  <section>
-    <p>任何兼容 OpenAI chat/completions 的接口都可以用。译文质量通常最好，但更慢，并按接口方的价格计费。</p>
-    <label class="row"><span>接口地址</span><input type="text" id="llmBase" placeholder="https://api.openai.com/v1" /></label>
-    <label class="row"><span>API 密钥</span><input type="password" id="llmKey" autocomplete="off" /></label>
-    <label class="row"><span>模型</span><input type="text" id="llmModel" /></label>
-  </section>
-
-  <h2>总是翻译的网站</h2>
-  <section>
-    <p>每行一个域名或 IP:端口（例如 news.ycombinator.com、192.168.1.10:8080），打开这些网站时自动翻译。</p>
-    <textarea id="autoSites" spellcheck="false"></textarea>
-  </section>
-
-  <div class="actions"><span id="saved" class="ok"></span></div>
   <script src="translate-options.js"></script>
 </body>
 </html>

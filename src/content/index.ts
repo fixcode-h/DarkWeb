@@ -9,8 +9,11 @@ import {
   CACHE_PREFIX,
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
+  msToNextScheduleEdge,
   normalizeSettings,
+  scheduleActive,
   siteModeFor,
+  themeSignature,
   type Settings,
 } from '../shared/settings';
 import { parseColor, relativeLuminance } from './engine/color';
@@ -25,6 +28,18 @@ import { ensureNativeCookie, restoreNativeCookie } from './native-cookie';
 import { RootSheets, wrapScreen } from './sheets';
 
 type Mode = 'off' | 'dynamic' | 'native' | 'filter';
+
+/** 按站点缓存的覆盖样式；sig 对不上（调过主题 / 亮度）就不用 */
+interface CacheEntry {
+  sig: string;
+  css: string;
+  t: number;
+}
+
+function readCache(raw: unknown, s: Settings): string | null {
+  const e = raw as Partial<CacheEntry> | null;
+  return e && typeof e === 'object' && typeof e.css === 'string' && e.sig === themeSignature(s) ? e.css : null;
+}
 type Root = Document | ShadowRoot;
 
 const html = document.documentElement;
@@ -89,8 +104,9 @@ function pageLooksDark(ignoreSelector: string): boolean {
 }
 
 /** 站点规则生成的样式：vars 直接写进影子变量，css 原样追加 */
-function siteCss(rule: EffectiveRule): string {
-  let css = '';
+function siteCss(rule: EffectiveRule, tx: ColorTransformer): string {
+  // 页面没有自己设底色 / 文字色时的画布颜色，跟随主题和亮度（base.css 里引用）
+  let css = `:root{--drak-page-bg:${tx.transform('#fff', 'bg')};--drak-page-fg:${tx.transform('#000', 'fg')}}\n`;
   const vars = Object.entries(rule.vars);
   if (vars.length) {
     const roles: Role[] = ['bg', 'fg', 'border', 'shadow'];
@@ -152,8 +168,8 @@ class DynamicSession {
     this.inline.onBgUrl = (el, url) =>
       this.media.onInlineBg(el, url, (image) => this.inline.force(el, 'background-image', image));
     this.media = new MediaAnalyzer(this.ctx, (r) => this.roots.get(r));
-    this.siteSheet = this.newSheet(wrapScreen(siteCss(rule)));
-    this.mediaSheet = this.newSheet(wrapScreen(mediaCss(rule.invert)));
+    this.siteSheet = this.newSheet(wrapScreen(siteCss(rule, tx)));
+    this.mediaSheet = this.newSheet(wrapScreen(mediaCss(rule.invert, settings.imageBrightness)));
     this.styleObserver = new MutationObserver((recs) =>
       guard.run('style-text', () => {
         for (const r of recs) this.markDirty(r.target.getRootNode() as Root);
@@ -224,15 +240,21 @@ class DynamicSession {
       }, 1000),
     );
     // 单页应用路由变化后再自检一次
-    this.timers.push(
-      window.setInterval(() => {
-        if (location.href !== this.lastHref) {
-          this.lastHref = location.href;
-          this.markAllDirty();
-          this.timers.push(window.setTimeout(() => this.selfCheck(), 800));
-        }
-      }, 1500),
-    );
+    const onRoute = () => {
+      if (this.stopped || location.href === this.lastHref) return;
+      this.lastHref = location.href;
+      this.markAllDirty();
+      this.timers.push(window.setTimeout(() => this.selfCheck(), 800));
+    };
+    const nav = (window as unknown as { navigation?: EventTarget }).navigation;
+    if (nav) {
+      // Navigation API 覆盖 pushState / replaceState / 前进后退，不用轮询
+      nav.addEventListener('navigatesuccess', onRoute, { signal: this.abort.signal });
+    } else {
+      window.addEventListener('popstate', onRoute, { signal: this.abort.signal });
+      window.addEventListener('hashchange', onRoute, { signal: this.abort.signal });
+      this.timers.push(window.setInterval(onRoute, 3000));
+    }
   }
 
   /** 缓存：等跨域样式表都拉完，移除旧缓存并写入新的 */
@@ -251,7 +273,8 @@ class DynamicSession {
     if (!isTop) return;
     const text = doc.allText();
     if (text.length > 0 && text.length < CACHE_LIMIT) {
-      chrome.storage.local.set({ [CACHE_PREFIX + host]: text }).catch(() => undefined);
+      const entry: CacheEntry = { sig: themeSignature(this.ctx.settings), css: text, t: Date.now() };
+      chrome.storage.local.set({ [CACHE_PREFIX + host]: entry }).catch(() => undefined);
     }
   }
 
@@ -498,8 +521,8 @@ class Drak {
       .get([SETTINGS_KEY, CACHE_PREFIX + host])
       .then((data) => {
         const s = normalizeSettings(data[SETTINGS_KEY]);
-        const cache = isTop && typeof data[CACHE_PREFIX + host] === 'string' ? (data[CACHE_PREFIX + host] as string) : null;
-        const changed = JSON.stringify(s) !== JSON.stringify(this.settings);
+        const cache = isTop ? readCache(data[CACHE_PREFIX + host], s) : null;
+        const changed = this.effectiveKey(s) !== this.effectiveKey(this.settings);
         this.settings = s;
         if (cache && this.session && !this.session.readyAt && !changed) {
           // 还没到 DOMContentLoaded：补上缓存层
@@ -523,12 +546,23 @@ class Drak {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local' || !changes[SETTINGS_KEY]) return;
       const s = normalizeSettings(changes[SETTINGS_KEY].newValue);
-      if (JSON.stringify(s) === JSON.stringify(this.settings)) return;
+      // 只有对本页有影响的设置变了才重启（别的网站的模式、规则变化不用整页重算）
+      const same = this.effectiveKey(s) === this.effectiveKey(this.settings);
       this.settings = s;
+      if (same) return;
+      // 外观变了，旧缓存不再适用
+      this.cacheText = null;
       this.restart();
     });
     this.mql.addEventListener('change', () => {
       if (this.settings.followSystem) this.restart();
+    });
+    // 后台标签页的定时器会被浏览器推迟（休眠后更明显）：切回来时补一次判断
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || !this.settings.scheduleEnabled || !this.settings.enabled) return;
+      const offBySchedule = this.mode === 'off' && this.reason === 'scheduled-off';
+      const shouldBeOff = !scheduleActive(this.settings);
+      if (shouldBeOff ? this.mode !== 'off' : offBySchedule) this.restart();
     });
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (msg?.type === 'diag') {
@@ -568,18 +602,59 @@ class Drak {
     return this.cssDone.get(url);
   }
 
+  private ruleSrc: string | null = null;
+  private ruleMemo!: EffectiveRule;
+
+  /** 本站生效的规则；用户规则文本没变就不重新解析 */
   private rule(): EffectiveRule {
-    const user = parseUserRules(this.settings.userRules).rules;
-    return resolveRule(host, BUILTIN_RULES, user);
+    if (this.ruleSrc !== this.settings.userRules) {
+      this.ruleSrc = this.settings.userRules;
+      this.ruleMemo = resolveRule(host, BUILTIN_RULES, parseUserRules(this.ruleSrc).rules);
+    }
+    return this.ruleMemo;
+  }
+
+  /** 对本页有影响的设置摘要 */
+  private effectiveKey(s: Settings): string {
+    const prev = this.settings;
+    this.settings = s;
+    const rule = this.rule();
+    this.settings = prev;
+    return JSON.stringify([
+      s.enabled,
+      s.followSystem,
+      s.brightness,
+      s.contrast,
+      s.theme,
+      s.saturation,
+      s.imageBrightness,
+      s.dimImages,
+      s.scheduleEnabled && [s.scheduleStart, s.scheduleEnd],
+      siteModeFor(s, host),
+      rule,
+    ]);
+  }
+
+  private scheduleTimer = 0;
+
+  /** 定时启用：到下一个切换点时重新判断 */
+  private armSchedule(): void {
+    clearTimeout(this.scheduleTimer);
+    const ms = msToNextScheduleEdge(this.settings);
+    if (ms === null) return;
+    // 多等 1 秒，避开分钟边界上的误差；setTimeout 上限约 24.8 天，这里最长一天
+    this.scheduleTimer = window.setTimeout(() => this.restart(), ms + 1000);
   }
 
   apply(): void {
     this.guard = new Guard((reason) => this.onTrip(reason));
     const s = this.settings;
+    this.armSchedule();
     if (!s.enabled) return this.turnOff('disabled');
     const siteMode = siteModeFor(s, host);
     if (siteMode === 'off') return this.turnOff('site-disabled');
     if (s.followSystem && !this.mql.matches) return this.turnOff('system-light');
+    if (!scheduleActive(s)) return this.turnOff('scheduled-off');
     const rule = this.rule();
     const mode: Mode = siteMode !== 'auto' ? siteMode : rule.mode || 'dynamic';
     if (mode === 'off') return this.turnOff('rule-off');

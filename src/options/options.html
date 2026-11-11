@@ -6,19 +6,57 @@
   <link rel="stylesheet" href="ui.css" />
 </head>
 <body class="options">
-  <h1>Drak 暗色模式 · 设置</h1>
-  <p>大多数网站不需要任何设置。某个网站效果不理想时，可以在这里为它单独写修正规则。</p>
+  <header class="page-head">
+    <img src="icons/icon-128.png" alt="" width="40" height="40" />
+    <div>
+      <h1>Drak 暗色模式</h1>
+      <p>大多数网站不需要任何设置。某个网站效果不理想时，可以在这里单独调整。</p>
+    </div>
+    <label class="switch" title="全局开关"><input type="checkbox" id="enabled" /><span></span></label>
+  </header>
 
-  <h2>按站点的模式</h2>
-  <section>
+  <div class="grid">
+    <section class="card">
+      <h2>外观</h2>
+      <div id="appearance"></div>
+    </section>
+
+    <section class="card">
+      <h2>启用条件</h2>
+      <label class="opt">
+        <span>只在系统为深色时启用<small>跟随操作系统的深色 / 浅色切换</small></span>
+        <span class="switch small"><input type="checkbox" id="followSystem" /><span></span></span>
+      </label>
+      <label class="opt">
+        <span>定时启用<small>只在下面的时段内启用，起点晚于终点表示跨到次日</small></span>
+        <span class="switch small"><input type="checkbox" id="scheduleEnabled" /><span></span></span>
+      </label>
+      <div class="times" id="times">
+        <input type="time" id="scheduleStart" aria-label="开始时间" />
+        <span>至</span>
+        <input type="time" id="scheduleEnd" aria-label="结束时间" />
+      </div>
+      <h2 class="sub">图片</h2>
+      <label class="opt">
+        <span>白底截图、图表降低亮度<small>照片不受影响</small></span>
+        <span class="switch small"><input type="checkbox" id="dimImages" /><span></span></span>
+      </label>
+      <h2 class="sub">快捷键</h2>
+      <p class="keys"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>D</kbd> 开关当前网站　<kbd>Alt</kbd><kbd>Shift</kbd><kbd>A</kbd> 全局开关</p>
+      <div class="actions"><button id="shortcuts" type="button">修改快捷键</button></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>按站点的模式</h2>
     <table class="sites" id="sites"><tbody></tbody></table>
-    <p id="noSites">还没有单独设置过的网站。在弹窗里修改“本站模式”后会出现在这里。</p>
+    <p id="noSites" class="empty">还没有单独设置过的网站。在弹窗里修改“本站模式”后会出现在这里。</p>
   </section>
 
-  <h2>站点修正规则</h2>
-  <section>
-    <p>JSON 数组，每条规则可用的字段：match（必填，如 "*.example.com"）、mode（dynamic / native / filter / off）、
-      native、ignore、invert、keepImage、vars、css。用户规则优先于内置规则。</p>
+  <section class="card">
+    <h2>站点修正规则</h2>
+    <p>JSON 数组，每条规则可用的字段：<code>match</code>（必填，如 "*.example.com"）、<code>mode</code>（dynamic / native / filter / off）、
+      <code>native</code>、<code>ignore</code>、<code>invert</code>、<code>keepImage</code>、<code>vars</code>、<code>css</code>。用户规则优先于内置规则。</p>
     <textarea id="rules" spellcheck="false"></textarea>
     <div class="actions">
       <button class="primary" id="saveRules" type="button">保存规则</button>
@@ -26,16 +64,30 @@
       <span id="rulesMsg"></span>
     </div>
     <div class="errors" id="rulesErr"></div>
+    <details>
+      <summary>查看内置规则（只读）</summary>
+      <pre id="builtin"></pre>
+    </details>
   </section>
 
-  <h2>内置规则（只读）</h2>
-  <section><pre id="builtin"></pre></section>
+  <div class="grid">
+    <section class="card">
+      <h2>备份与恢复</h2>
+      <p>导出全部设置（外观、站点模式、修正规则）为 JSON 文件，可在另一台设备上导入。</p>
+      <div class="actions">
+        <button id="exportBtn" type="button">导出设置</button>
+        <button id="importBtn" type="button">导入设置</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden />
+        <span id="backupMsg"></span>
+      </div>
+    </section>
 
-  <h2>缓存</h2>
-  <section>
-    <p>为了重复访问时不闪白，Drak 会按网站缓存上次生成的配色样式。</p>
-    <div class="actions"><button id="clearCache" type="button">清空缓存</button><span id="cacheMsg"></span></div>
-  </section>
+    <section class="card">
+      <h2>缓存</h2>
+      <p>为了重复访问时不闪白，Drak 会按网站缓存上次生成的配色样式。超过 30 天未访问的会自动清理。</p>
+      <div class="actions"><button id="clearCache" type="button">清空缓存</button><span id="cacheMsg" class="hint"></span></div>
+    </section>
+  </div>
   <script src="options.js"></script>
 </body>
 </html>
