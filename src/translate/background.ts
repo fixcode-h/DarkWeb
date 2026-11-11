@@ -112,9 +112,14 @@ async function sendToTab(tabId: number, type: 'tr:start' | 'tr:toggle'): Promise
   }
 }
 
-chrome.runtime.onMessage.addListener((msg: { type?: string; tabId?: number; texts?: string[]; to?: string; engine?: EngineId }, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg: { type?: string; tabId?: number; texts?: string[]; to?: string; engine?: EngineId }, sender, sendResponse) => {
   if (msg?.type === 'tr:translate' && Array.isArray(msg.texts) && msg.to && msg.engine) {
     translate(msg as TranslateRequest).then(sendResponse);
+    return true;
+  }
+  // 页面侧边按钮：作用于发消息的标签页
+  if (msg?.type === 'tr:toggle-self' && sender.tab?.id !== undefined) {
+    sendToTab(sender.tab.id, 'tr:toggle').then(() => sendResponse({ ok: true }));
     return true;
   }
   if ((msg?.type === 'tr:start' || msg?.type === 'tr:toggle') && typeof msg.tabId === 'number') {

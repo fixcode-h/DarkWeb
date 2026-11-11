@@ -13,7 +13,9 @@ import {
   normalizeTranslate,
   type EngineId,
   type PageCommand,
+  type PageState,
   type PageStatus,
+  STATE_EVENT,
   type TranslateRequest,
   type TranslateResponse,
   type TranslateSettings,
@@ -145,9 +147,16 @@ class PageTranslator {
     return { active: this.active, total, done, engine: this.usedEngine, error: this.error };
   }
 
+  /** 告诉侧边按钮当前状态（同一页面里的其他内容脚本） */
+  private emit(): void {
+    const state: PageState = { active: this.active, busy: this.active && (this.inFlight > 0 || this.queue.length > 0) };
+    document.dispatchEvent(new CustomEvent(STATE_EVENT, { detail: JSON.stringify(state) }));
+  }
+
   async start(): Promise<void> {
     if (this.active) return;
     this.active = true;
+    this.emit();
     this.settings = await loadTranslate();
     if (!this.active) return;
     this.error = '';
@@ -178,6 +187,7 @@ class PageTranslator {
     this.roots.clear();
     for (const s of this.styles) s.remove();
     this.styles = [];
+    this.emit();
   }
 
   // ---- 样式 ----
@@ -348,6 +358,7 @@ class PageTranslator {
       }
       if (batch.length) void this.send(batch);
     }
+    this.emit();
   }
 
   private async send(batch: Run[]): Promise<void> {

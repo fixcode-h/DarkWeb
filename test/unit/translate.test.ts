@@ -71,6 +71,11 @@ describe('翻译：设置', () => {
     expect(s.autoSites).toEqual(['a.com']);
     expect(s.llm).toEqual({ ...DEFAULT_TRANSLATE.llm, apiKey: 'k' });
   });
+  it('侧边按钮设置', () => {
+    expect(normalizeTranslate({}).fab).toEqual(DEFAULT_TRANSLATE.fab);
+    const f = normalizeTranslate({ fab: { enabled: false, side: 'top', y: 3, hiddenSites: ['a.com', 2] } }).fab;
+    expect(f).toEqual({ enabled: false, side: 'right', y: 0.95, hiddenSites: ['a.com'] });
+  });
   it('站点按 域名 或 IP:端口 识别', () => {
     expect(siteKeyOf('www.Example.com')).toBe('example.com');
     expect(siteKeyOf('192.168.1.10:8080')).toBe('192.168.1.10:8080');

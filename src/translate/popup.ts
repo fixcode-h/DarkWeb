@@ -71,7 +71,16 @@ async function main(): Promise<void> {
   auto.checked = !!site && settings.autoSites.includes(site);
 
   const toggle = $<HTMLButtonElement>('trToggle');
-  toggle.disabled = auto.disabled = !site;
+  const fab = $<HTMLInputElement>('trFab');
+  const fabOn = () => settings.fab.enabled && !settings.fab.hiddenSites.includes(site);
+  fab.checked = !!site && fabOn();
+  toggle.disabled = auto.disabled = fab.disabled = !site;
+  fab.addEventListener('change', async () => {
+    const hiddenSites = settings.fab.hiddenSites.filter((s) => s !== site);
+    if (!fab.checked) hiddenSites.push(site);
+    // 全局关掉了按钮时，在某个站点打开它等于重新全局打开
+    await save({ fab: { ...settings.fab, enabled: settings.fab.enabled || fab.checked, hiddenSites } });
+  });
   toggle.addEventListener('click', async () => {
     if (tabId === undefined) return;
     await chrome.runtime.sendMessage({ type: 'tr:toggle', tabId });

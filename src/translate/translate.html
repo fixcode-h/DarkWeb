@@ -66,6 +66,16 @@
   </div>
 
   <section class="card">
+    <h2>侧边翻译按钮</h2>
+    <label class="opt">
+      <span>在网页侧边显示翻译按钮<small>点一下翻译，再点一下显示原文；按住可上下拖动、拖到左边或右边</small></span>
+      <span class="switch small"><input type="checkbox" id="fabEnabled" /><span></span></span>
+    </label>
+    <p>不显示按钮的网站，每行一个域名或 IP:端口。也可以在按钮旁的“本站隐藏”或弹窗里设置。</p>
+    <textarea id="fabHidden" spellcheck="false" rows="4" style="min-height:110px"></textarea>
+  </section>
+
+  <section class="card">
     <h2>总是翻译的网站</h2>
     <p>每行一个域名或 IP:端口（例如 news.ycombinator.com、192.168.1.10:8080），也可以直接粘贴完整网址。打开这些网站的任何页面时自动翻译。</p>
     <textarea id="autoSites" spellcheck="false" rows="6"></textarea>

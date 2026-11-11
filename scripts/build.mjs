@@ -31,6 +31,7 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/popup/popup.ts')], outfile: join(dist, 'popup.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/options/options.ts')], outfile: join(dist, 'options.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/translate/content.ts')], outfile: join(dist, 'translate.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/translate/fab.ts')], outfile: join(dist, 'translate-fab.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/translate/popup.ts')], outfile: join(dist, 'translate-popup.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/translate/options.ts')], outfile: join(dist, 'translate-options.js'), format: 'iife' }),
 ]);
