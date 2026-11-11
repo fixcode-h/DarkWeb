@@ -32,8 +32,9 @@ const log = git('log', range, '--format=%H%x00%P%x00%s%x00%b%x1e')
 
 const items = [];
 for (const c of log) {
-  const m = /^Merge pull request #(\d+) /.exec(c.subject);
-  if (!m) continue;
+  const m = /^Merge pull request #(\d+) from \S+?\/(\S+)/.exec(c.subject);
+  // dev 合入 main 的 PR 只是搬运，里面的改动已经各自列出
+  if (!m || m[2] === 'dev') continue;
   const title = c.body.split('\n').map((l) => l.trim()).find(Boolean) || c.subject;
   items.push(`- ${title}（#${m[1]}）`);
 }
