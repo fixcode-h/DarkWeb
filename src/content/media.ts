@@ -198,11 +198,18 @@ function dimmedBg(url: string): string {
   return `linear-gradient(rgba(0,0,0,.78),rgba(0,0,0,.78)),url("${safe}")`;
 }
 
-/** 所有根共用的媒体样式：分类结果 -> 滤镜；站点规则的 invert 选择器 */
-export function mediaCss(invertSelectors: string[]): string {
+/** 所有根共用的媒体样式：分类结果 -> 滤镜；站点规则的 invert 选择器；图片整体亮度 */
+export function mediaCss(invertSelectors: string[], imageBrightness = 100): string {
+  const b = Math.min(100, Math.max(30, imageBrightness)) / 100;
   let css =
     `[${ATTR}="invert"]{filter:invert(1) hue-rotate(180deg) !important}\n` +
-    `[${ATTR}="dim"]{filter:brightness(.8) contrast(1.1) !important}\n`;
+    `[${ATTR}="dim"]{filter:brightness(${round2(0.8 * b)}) contrast(1.1) !important}\n`;
+  // 不加 !important、用 :where 压低优先级：页面自己给图片设的滤镜优先
+  if (b < 1) css += `:where(img:not([${ATTR}])){filter:brightness(${round2(b)})}\n`;
   for (const sel of invertSelectors) css += `${sel}{filter:invert(1) hue-rotate(180deg) !important}\n`;
   return css;
+}
+
+function round2(v: number): string {
+  return String(Math.round(v * 100) / 100);
 }

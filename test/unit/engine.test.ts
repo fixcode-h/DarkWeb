@@ -133,3 +133,53 @@ describe('helpers', () => {
     expect(roleOfProperty('width')).toBeNull();
   });
 });
+
+describe('theme presets', () => {
+  const presets = ['default', 'black', 'soft', 'warm', 'blue'] as const;
+  it('keeps text readable and dividers visible in every preset and brightness', () => {
+    for (const p of presets) {
+      for (const brightness of [0, 50, 100]) {
+        const t = buildTheme({ brightness, contrast: 50, theme: p });
+        const page = transformRgba(parseColor('#fff')!, 'bg', t);
+        for (const b of ['#fff', '#f6f6f6', '#e3e5e7']) {
+          const bg = transformRgba(parseColor(b)!, 'bg', t);
+          for (const f of ['#121212', '#8590a6', 'rgba(0,0,0,.45)']) {
+            expect(contrastRatio(transformRgba(parseColor(f)!, 'fg', t), bg), `${p}/${brightness}: ${f} on ${b}`).toBeGreaterThanOrEqual(4.5);
+          }
+        }
+        const border = transformRgba(parseColor('#ebebeb')!, 'border', t);
+        expect(rgbToOklch(border).l - rgbToOklch(page).l, `${p}/${brightness} border`).toBeGreaterThanOrEqual(0.1);
+      }
+    }
+  });
+  it('black maps a white page to pure black', () => {
+    const out = transformRgba(parseColor('#fff')!, 'bg', buildTheme({ brightness: 50, contrast: 50, theme: 'black' }));
+    expect(Math.max(out.r, out.g, out.b)).toBeLessThanOrEqual(1);
+  });
+  it('warm and blue tint neutral colors but leave accents alone', () => {
+    const warm = buildTheme({ brightness: 50, contrast: 50, theme: 'warm' });
+    const bg = transformRgba(parseColor('#fff')!, 'bg', warm);
+    expect(bg.r).toBeGreaterThan(bg.b);
+    const fg = transformRgba(parseColor('#121212')!, 'fg', warm);
+    expect(fg.r).toBeGreaterThan(fg.b);
+    const blue = buildTheme({ brightness: 50, contrast: 50, theme: 'blue' });
+    const bbg = transformRgba(parseColor('#fff')!, 'bg', blue);
+    expect(bbg.b).toBeGreaterThan(bbg.r);
+    const accent = parseColor('#056de8')!;
+    expect(transformRgba(accent, 'bg', warm)).toEqual(transformRgba(accent, 'bg', theme));
+  });
+  it('default preset output is unchanged by the new options', () => {
+    expect(buildTheme({ brightness: 50, contrast: 50, theme: 'default', saturation: 50 })).toEqual(theme);
+    expect(theme.bgMin).toBeCloseTo(0.2, 5);
+  });
+  it('saturation 0 turns accents gray, 100 makes them more vivid', () => {
+    const accent = parseColor('#056de8')!;
+    const gray = transformRgba(accent, 'bg', buildTheme({ brightness: 50, contrast: 50, saturation: 0 }));
+    expect(Math.max(gray.r, gray.g, gray.b) - Math.min(gray.r, gray.g, gray.b)).toBeLessThan(2);
+    // 用一个没顶到色域边界的颜色（#056de8 提亮后已是最大彩度）
+    const muted = parseColor('#5b8fc7')!;
+    const base = rgbToOklch(transformRgba(muted, 'fg', theme)).c;
+    const vivid = rgbToOklch(transformRgba(muted, 'fg', buildTheme({ brightness: 50, contrast: 50, saturation: 100 }))).c;
+    expect(vivid).toBeGreaterThan(base);
+  });
+});
