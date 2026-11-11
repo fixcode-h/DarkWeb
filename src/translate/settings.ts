@@ -77,10 +77,8 @@ export async function saveTranslate(s: TranslateSettings): Promise<void> {
   await chrome.storage.local.set({ [TRANSLATE_KEY]: s });
 }
 
-/** 站点标识：域名或 IP，带非默认端口，去掉 www. —— location.host 即可 */
-export function siteKeyOf(host: string): string {
-  return host.toLowerCase().replace(/^www\./, '');
-}
+/** 站点标识与“本站关闭”一致：域名[:端口] 或 IP[:端口]，去掉 www. 和默认端口 */
+export { siteKeyOf } from '../shared/settings';
 
 // ---- 消息 ----
 export interface TranslateRequest {

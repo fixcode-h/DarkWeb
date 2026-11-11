@@ -12,14 +12,7 @@ let savedTimer = 0;
 export function parseSites(text: string): string[] {
   const out = new Set<string>();
   for (const line of text.split(/[\s,]+/)) {
-    let v = line.trim();
-    if (!v) continue;
-    try {
-      if (/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) v = new URL(v).host;
-    } catch {
-      /* 按原样处理 */
-    }
-    v = siteKeyOf(v.replace(/\/.*$/, ''));
+    const v = siteKeyOf(line);
     if (v) out.add(v);
   }
   return [...out];
