@@ -100,6 +100,11 @@ export class InlineStyler {
     this.count++;
   }
 
+  /** 元素当前的 style 属性是否就是我们上次写入的结果（用来区分页面自己的改动） */
+  wroteLast(el: Element): boolean {
+    return this.lastAttr.has(el) && this.lastAttr.get(el) === el.getAttribute('style');
+  }
+
   /** 自检发现的亮区：强制改背景 */
   force(el: Element, prop: string, value: string): void {
     if (!(el instanceof HTMLElement)) return;

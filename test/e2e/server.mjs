@@ -96,6 +96,31 @@ export function startServer() {
       if (url.pathname === '/darksite') {
         return send('text/html; charset=utf-8', '<!doctype html><html><head><style>body{background:#111;color:#eee}</style></head><body><p>本来就是深色的网站</p></body></html>');
       }
+      const doc = (head, body) => send('text/html; charset=utf-8', `<!doctype html><html><head>${head}</head><body>${body}</body></html>`);
+      const filler = '<p>正文</p>'.repeat(80);
+      // body 透明，深色画在包裹层上（单页应用常见写法）
+      if (url.pathname === '/darkwrap') {
+        return doc('<style>body{margin:0}#app{background:#1e1f22;color:#dcddde;min-height:100vh}</style>', `<div id="app"><h1>包裹层深色</h1>${filler}</div>`);
+      }
+      // 只声明 color-scheme，不写任何颜色
+      if (url.pathname === '/darkscheme') return doc('<meta name="color-scheme" content="dark">', `<h1>只声明 color-scheme</h1>${filler}`);
+      // 深灰主题
+      if (url.pathname === '/darkgray') return doc('<style>body{background:#36393f;color:#dcddde}</style>', `<h1>深灰主题</h1>${filler}`);
+      // 加载完成后才由脚本套上暗色主题，带过渡动画；window.toggleTheme() 模拟用户在网站里切换
+      if (url.pathname === '/darklate') {
+        return doc(
+          '<style>body{background:#fff;color:#222;transition:background-color .3s,color .3s}.card{background:#f6f6f6;padding:20px;transition:background-color .3s}html.dark body{background:#121212;color:#eee}html.dark .card{background:#1e1e1e}</style>',
+          `<div class="card" id="card">卡片</div>${filler}<script>window.toggleTheme=()=>document.documentElement.classList.toggle('dark');addEventListener('load',()=>setTimeout(window.toggleTheme,200));</script>`,
+        );
+      }
+      // 浅色网站，所有元素都带颜色过渡：复查网站是否自带暗色时不能闪白
+      if (url.pathname === '/transition') {
+        return doc('<style>*{transition:background-color .4s,color .4s}body{background:#fff;color:#222}.card{background:#f3f3f3;padding:40px}</style>', `<div class="card">卡片</div>${filler}`);
+      }
+      // 浅色网站 + 占满首屏的深色头图：不能当成暗色网站
+      if (url.pathname === '/hero') {
+        return doc('<style>body{margin:0;background:#fff;color:#222}#hero{height:100vh;background:#0b0b0f;color:#fff}</style>', `<div id="hero"><h1>深色头图</h1></div><div id="content">${filler}</div>`);
+      }
       res.writeHead(404);
       res.end('not found');
     });
