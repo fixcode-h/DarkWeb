@@ -60,6 +60,30 @@
       </div>
     </section>
 
+    <section class="card tr" id="trBox">
+      <div class="tr-head">
+        <h2>网页翻译</h2>
+        <button id="trToggle" class="primary" type="button">翻译此页面</button>
+      </div>
+      <label class="field"><span>目标语言</span><select id="trTarget"></select></label>
+      <label class="field"><span>翻译引擎</span><select id="trEngine"></select></label>
+      <label class="field">
+        <span>显示方式</span>
+        <select id="trMode">
+          <option value="bilingual">双语对照</option>
+          <option value="replace">仅显示译文</option>
+        </select>
+      </label>
+      <label class="opt">
+        <span>总是翻译此网站</span>
+        <span class="switch small"><input type="checkbox" id="trAuto" /><span></span></span>
+      </label>
+      <div class="tr-foot">
+        <span class="hint" id="trStatus"></span>
+        <a href="#" id="trOptions">翻译设置</a>
+      </div>
+    </section>
+
     <details id="diagBox">
       <summary>诊断信息</summary>
       <pre id="diag"></pre>
@@ -68,9 +92,10 @@
   </main>
 
   <footer>
-    <span class="hint"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>D</kbd> 开关本站</span>
+    <span class="hint"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>D</kbd> 开关本站 · <kbd>T</kbd> 翻译</span>
     <a href="#" id="openOptions">规则与设置</a>
   </footer>
   <script src="popup.js"></script>
+  <script src="translate-popup.js"></script>
 </body>
 </html>

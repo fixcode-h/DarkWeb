@@ -117,7 +117,7 @@ body.popup header { display: flex; justify-content: space-between; align-items: 
 .brand-name { font-weight: 600; font-size: 14px; line-height: 1.3; }
 .brand-sub { color: var(--muted); font-size: 12px; line-height: 1.3; }
 body.popup main { display: flex; flex-direction: column; gap: 8px; padding: 0 10px; }
-body.popup main.disabled .card:not(.site), body.popup main.disabled .seg { opacity: .5; }
+body.popup main.disabled .card:not(.site):not(.tr), body.popup main.disabled .site .seg { opacity: .5; }
 .site-head { display: flex; align-items: center; gap: 8px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #5a5e66; flex: none; }
 .dot[data-state=on] { background: var(--ok); box-shadow: 0 0 0 3px rgba(111, 207, 151, .18); }
@@ -126,6 +126,18 @@ body.popup main.disabled .card:not(.site), body.popup main.disabled .seg { opaci
 .status { color: var(--muted); font-size: 12px; margin: 2px 0 10px; min-height: 18px; }
 body.popup details { padding: 2px 6px; }
 body.popup footer { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px 12px; }
+
+/* 网页翻译 */
+.tr-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.tr-head h2 { margin: 0; }
+.tr-head button { padding: 3px 12px; }
+.field { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; }
+.field select, .field input[type=text], .field input[type=password] { width: 170px; }
+.tr-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; min-height: 18px; }
+body.options .field select, body.options .field input[type=text], body.options .field input[type=password] { width: 300px; max-width: 60%; }
+input[type=text], input[type=password] {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; font: inherit; padding: 5px 10px;
+}
 
 /* ---- 设置页 ---- */
 body.options { max-width: 920px; margin: 0 auto; padding: 28px 20px 48px; font-size: 14px; }

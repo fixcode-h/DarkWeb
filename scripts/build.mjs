@@ -30,10 +30,13 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/content/probe.ts')], outfile: join(dist, 'probe.js'), format: 'iife', sourcemap: false }),
   build({ ...common, entryPoints: [join(root, 'src/popup/popup.ts')], outfile: join(dist, 'popup.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/options/options.ts')], outfile: join(dist, 'options.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/translate/content.ts')], outfile: join(dist, 'translate.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/translate/popup.ts')], outfile: join(dist, 'translate-popup.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/translate/options.ts')], outfile: join(dist, 'translate-options.js'), format: 'iife' }),
 ]);
 
 // 静态文件
-for (const f of ['popup/popup.html', 'popup/ui.css', 'options/options.html']) {
+for (const f of ['popup/popup.html', 'popup/ui.css', 'options/options.html', 'translate/translate.html']) {
   copyFileSync(join(root, 'src', f), join(dist, f.split('/').pop()));
 }
 const base = readFileSync(join(root, 'src/content/base.css'), 'utf8');

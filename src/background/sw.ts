@@ -3,6 +3,7 @@
  */
 import { classify, classifySvgText, computeStats, type ImageClass } from '../shared/image-stats';
 import type { AnalyzeResponse, FetchCssResponse, InvertResponse, Request } from '../shared/messages';
+import '../translate/background';
 import {
   CACHE_PREFIX,
   DEFAULT_SETTINGS,
