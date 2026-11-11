@@ -276,6 +276,40 @@ async function main() {
       await again.close();
     }
 
+    // ---------- 知乎：页面按暗色 cookie 渲染后关闭本站 -> 还原 cookie 并自动刷新成浅色 ----------
+    {
+      const page = await open(Z + 'explore?native=1&visit=off', 1000);
+      const before = await page.evaluate(() => document.cookie);
+      await page.evaluate(() => (window.__beforeReload = 1));
+      await setSettings({ siteModes: { [`zhihu.com:${port}`]: 'off' } });
+      await page.waitForTimeout(1500);
+      const after = await page.evaluate(() => ({ marker: window.__beforeReload ?? null, cookie: document.cookie, theme: document.documentElement.getAttribute('data-theme') }));
+      check(
+        '知乎：按暗色 cookie 渲染的页面关闭本站后还原 cookie 并刷新',
+        /(^|; )themeApp=dark/.test(before) && after.marker === null && !/(^|; )themeApp=dark/.test(after.cookie) && after.theme !== 'dark',
+        `${before} -> ${JSON.stringify(after)}`,
+      );
+      const lum = await page.evaluate(() => window.__t.info(document.body).bgLum);
+      check('知乎：关闭本站并刷新后页面是浅色', lum > 0.8, lum.toFixed(4));
+      await setSettings({ siteModes: {} });
+      await page.waitForTimeout(400);
+      await page.close();
+    }
+
+    // ---------- 滤镜模式跟随滑块 ----------
+    {
+      await setSettings({ siteModes: { [`zhihu.com:${port}`]: 'filter' } });
+      const page = await open(Z + 'explore?visit=filter', 800);
+      const f1 = await page.evaluate(() => getComputedStyle(document.documentElement).filter);
+      await setSettings({ brightness: 90, contrast: 80 });
+      await page.waitForTimeout(500);
+      const f2 = await page.evaluate(() => getComputedStyle(document.documentElement).filter);
+      check('滤镜模式：亮度、对比度滑杆生效', /invert\(1\)/.test(f1) && /invert\(0\.88\)/.test(f2) && /contrast\(1\.18\)/.test(f2), `${f1} -> ${f2}`);
+      await setSettings({ siteModes: {}, brightness: 50, contrast: 50 });
+      await page.waitForTimeout(400);
+      await page.close();
+    }
+
     // ---------- 哔哩哔哩 ----------
     {
       const page = await open(B, 1500);

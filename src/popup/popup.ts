@@ -21,7 +21,7 @@ const MODE_TEXT: Record<string, string> = {
 };
 const REASON_TEXT: Record<string, string> = {
   default: '',
-  'site-rule': '（站点规则）',
+  'site-rule': '（内置站点规则）',
   'user-choice': '（你的选择）',
   'native-failed': '（原生暗色未生效，已改用动态配色）',
   'native-pending': '（已开启站点原生暗色，刷新后生效；本次先用动态配色）',
@@ -51,10 +51,43 @@ async function inject(): Promise<void> {
   if (tabId !== undefined) await chrome.runtime.sendMessage({ type: 'inject', tabId });
 }
 
+/** 当前模式下外观调节是否起作用，不起作用时说明原因并给出一键改法 */
+function showNote(d: Diagnostics | null): void {
+  const note = $('note');
+  const action = $<HTMLButtonElement>('noteAction');
+  let text = '';
+  let act: { label: string; run: () => void } | null = null;
+  let inactive = false;
+  if (d?.mode === 'native') {
+    text = '这个网站在用它自带的暗色主题，下面的配色主题和亮度、对比度等调节对它不起作用。';
+    act = { label: '改用动态配色，自己调颜色', run: () => void setSiteMode('dynamic') };
+    inactive = true;
+  } else if (d?.mode === 'off' && d.reason === 'page-already-dark') {
+    text = '网站本身已是深色，插件没有再叠加一层，所以外观调节不起作用。';
+    inactive = true;
+  } else if (d?.mode === 'off' && d.pageDark) {
+    text = '插件已不再改动本页，但网站自己处于夜间模式，所以看起来仍是暗色。要浅色请在网站自己的设置里切换。';
+    inactive = true;
+  } else if (d?.mode === 'off') {
+    inactive = true;
+  } else if (d?.mode === 'filter') {
+    text = '滤镜模式只能整体调亮度、对比度、饱和度，配色主题不起作用。';
+  }
+  $('noteText').textContent = text;
+  note.hidden = !text;
+  action.hidden = !act;
+  if (act) {
+    action.textContent = act.label;
+    action.onclick = act.run;
+  }
+  $('appearance').closest('.card')?.classList.toggle('inactive', inactive);
+}
+
 async function refreshDiag(): Promise<void> {
   const dot = $('dot');
   if (tabId === undefined || !host) {
     dot.dataset.state = 'none';
+    showNote(null);
     return;
   }
   try {
@@ -62,7 +95,9 @@ async function refreshDiag(): Promise<void> {
     $('status').textContent = `当前：${MODE_TEXT[d.mode] ?? d.mode}${REASON_TEXT[d.reason] ?? ''}`;
     $('diag').textContent = JSON.stringify(d, null, 2);
     dot.dataset.state = d.mode === 'off' ? 'off' : d.reason === 'too-many-errors' || d.reason === 'native-failed' ? 'warn' : 'on';
+    showNote(d);
   } catch {
+    showNote(null);
     const idle = !settings.enabled || siteModeFor(settings, host) === 'off' || !scheduleActive(settings);
     $('status').textContent = !settings.enabled
       ? '全局已关闭'
@@ -172,6 +207,7 @@ async function main(): Promise<void> {
     if (area !== 'local' || !changes[SETTINGS_KEY]) return;
     settings = normalizeSettings(changes[SETTINGS_KEY].newValue);
     render();
+    setTimeout(refreshDiag, 400);
   });
   refreshDiag();
 }

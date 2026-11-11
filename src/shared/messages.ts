@@ -37,4 +37,6 @@ export interface Diagnostics {
   timings: Record<string, number>;
   brightRatio: number | null;
   frame: 'top' | 'sub';
+  /** 插件没在改颜色时，页面自己是不是深色（网站自带的夜间主题） */
+  pageDark?: boolean;
 }

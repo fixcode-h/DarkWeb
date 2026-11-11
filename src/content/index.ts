@@ -24,7 +24,7 @@ import { Guard, sampleBrightness } from './guard';
 import { pageLooksDark as looksDark, themeAttrChanged } from './native-dark';
 import { InlineStyler } from './inline';
 import { MediaAnalyzer, mediaCss } from './media';
-import { ensureNativeCookie, restoreNativeCookie } from './native-cookie';
+import { ensureNativeCookie, readCookie, restoreNativeCookie } from './native-cookie';
 import { RootSheets, wrapScreen } from './sheets';
 
 type Mode = 'off' | 'dynamic' | 'native' | 'filter';
@@ -49,6 +49,9 @@ const site = location.host;
 const isTop = window === window.top;
 const ATTR_FILTER = ['style', 'fill', 'stroke', 'stop-color', 'bgcolor', 'color', 'src', 'srcset', 'media', 'disabled', 'rel'];
 const CACHE_LIMIT = 1_500_000;
+/** 本次加载请求时带的 cookie：按 cookie 渲染主题的站点（知乎），页面是不是原生暗色由它决定，之后改 cookie 要刷新才生效 */
+const initialCookies = document.cookie;
+const RELOAD_KEY = '__drak_reload_at';
 
 function openOrClosedShadowRoot(el: Element): ShadowRoot | null {
   const dom = (chrome as unknown as { dom?: { openOrClosedShadowRoot?: (e: Element) => ShadowRoot | null } }).dom;
@@ -516,6 +519,9 @@ class Drak {
   private lastRecheck = 0;
   private rechecks = 0;
   private recheckMisses = 0;
+  /** 已读到真实设置（之前按默认设置先跑）；没读到前不改站点 cookie，免得本站已关闭时也被写上 */
+  private loaded = false;
+  private pendingReload = false;
 
   init(): void {
     // 先按默认设置立即开始（不等异步存储），读到真实设置后若有差异再重启
@@ -543,7 +549,13 @@ class Drak {
           }
         }
         this.cacheText = cache;
+        this.loaded = true;
         if (changed) this.restart();
+        else if (this.mode === 'native' || this.reason === 'native-pending') {
+          // 设置和默认一致：补写先前推迟的原生暗色 cookie
+          const c = this.rule().native?.cookie;
+          if (c) ensureNativeCookie(...c);
+        }
       })
       .catch(() => undefined);
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -565,6 +577,7 @@ class Drak {
     this.watchPageTheme();
     // 后台标签页的定时器会被浏览器推迟（休眠后更明显）：切回来时补一次判断
     document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.pendingReload) return this.reloadForCookie();
       if (document.hidden || !this.settings.scheduleEnabled || !this.settings.enabled) return;
       const offBySchedule = this.mode === 'off' && this.reason === 'scheduled-off';
       const shouldBeOff = !scheduleActive(this.settings);
@@ -733,10 +746,11 @@ class Drak {
     html.removeAttribute('data-drak-off');
     this.reason = siteMode !== 'auto' ? 'user-choice' : rule.mode ? 'site-rule' : 'default';
     const cookie = rule.native?.cookie;
-    if (cookie && mode !== 'native') restoreNativeCookie(...cookie);
+    if (cookie && mode !== 'native') this.restoreCookie(cookie);
     if (mode === 'filter') {
       this.mode = 'filter';
       html.setAttribute('data-drak-mode', 'filter');
+      this.setFilterSheet();
       html.setAttribute('data-drak-ready', '');
       return;
     }
@@ -759,7 +773,8 @@ class Drak {
     this.mode = 'native';
     html.setAttribute('data-drak-mode', 'native');
     const n = rule.native!;
-    if (n.cookie && !ensureNativeCookie(...n.cookie)) {
+    if (n.cookie && this.loaded) ensureNativeCookie(...n.cookie);
+    if (n.cookie && readCookie(n.cookie[0], initialCookies) !== n.cookie[1]) {
       // 服务端按 cookie 渲染主题：本次加载仍是浅色，先用动态配色，下次加载起走原生暗色
       this.startDynamic(rule);
       this.reason = 'native-pending';
@@ -855,13 +870,83 @@ class Drak {
   turnOff(reason: string): void {
     this.reason = reason;
     const cookie = this.rule().native?.cookie;
-    if (cookie) restoreNativeCookie(...cookie);
+    // 页面本身已是深色而让位时不动 cookie：那正是原生暗色在起作用
+    if (cookie && reason !== 'page-already-dark') this.restoreCookie(cookie);
     this.teardown();
     this.mode = 'off';
     html.setAttribute('data-drak-off', '');
   }
 
+  /**
+   * 不再使用原生暗色时把 cookie 还原。本页如果是按暗色 cookie 渲染的（服务端出的就是深色页面），
+   * 光还原 cookie 页面不会变回浅色，得刷新一次：前台标签页立即刷新，后台的等切回来再刷新。
+   */
+  private restoreCookie(cookie: [string, string]): void {
+    const p = restoreNativeCookie(...cookie);
+    if (!isTop || !this.loaded || readCookie(cookie[0], initialCookies) !== cookie[1]) return;
+    void p.then((changed) => {
+      if (!changed) return;
+      this.pendingReload = true;
+      if (!document.hidden) this.reloadForCookie();
+    });
+  }
+
+  private reloadForCookie(): void {
+    this.pendingReload = false;
+    // 还要用原生暗色了（关了又马上开）就不刷新
+    const c = this.rule().native?.cookie;
+    if (c && readCookie(c[0]) === c[1]) return;
+    try {
+      // 防止异常情况下反复刷新
+      const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+      if (Date.now() - last < 10_000) return;
+      sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    } catch {
+      return;
+    }
+    location.reload();
+  }
+
+  private filterSheet: CSSStyleSheet | null = null;
+
+  /** 滤镜模式也跟随亮度 / 对比度 / 饱和度滑块 */
+  private setFilterSheet(): void {
+    const s = this.settings;
+    const b = s.brightness / 100;
+    const c = s.contrast / 100;
+    // 反色后白底变黑：调亮靠少反一点（底色抬成深灰），调暗靠整体压暗
+    const inv = b > 0.5 ? 1 - (b - 0.5) * 0.3 : 1;
+    const dim = b < 0.5 ? 0.6 + 0.8 * b : 1;
+    const con = 0.7 + 0.6 * c;
+    const sat = s.saturation <= 50 ? s.saturation / 50 : 1 + ((s.saturation - 50) / 50) * 0.4;
+    const f = (n: number) => Math.round(n * 1000) / 1000;
+    const css =
+      `html[data-drak-mode="filter"]:not([data-drak-off]){filter:invert(${f(inv)}) hue-rotate(180deg) brightness(${f(dim)}) contrast(${f(con)}) saturate(${f(sat)}) !important}` +
+      `html[data-drak-mode="filter"]:not([data-drak-off]) :is(img, video, picture, canvas, iframe, embed, object, svg image),` +
+      `html[data-drak-mode="filter"]:not([data-drak-off]) [style*="background-image"]{filter:invert(1) hue-rotate(180deg) brightness(${f(s.imageBrightness / 100)}) !important}`;
+    try {
+      if (!this.filterSheet) this.filterSheet = new CSSStyleSheet();
+      this.filterSheet.replaceSync(css);
+      if (!document.adoptedStyleSheets.includes(this.filterSheet)) {
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, this.filterSheet];
+      }
+    } catch {
+      /* 不支持时退回 base.css 里的默认滤镜 */
+    }
+  }
+
+  private removeFilterSheet(): void {
+    const sh = this.filterSheet;
+    if (!sh) return;
+    try {
+      if (document.adoptedStyleSheets.includes(sh)) document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== sh);
+    } catch {
+      /* ignore */
+    }
+  }
+
   private teardown(): void {
+    this.removeFilterSheet();
     this.nativeProbing = false;
     this.session?.stop();
     this.session = null;
@@ -886,6 +971,7 @@ class Drak {
       this.reason = 'too-many-errors';
       html.removeAttribute('data-drak-off');
       html.setAttribute('data-drak-mode', 'filter');
+      this.setFilterSheet();
       html.setAttribute('data-drak-ready', '');
     } else {
       // 超慢页面：停掉图片分析等增量工作，保留已生效的样式
@@ -912,6 +998,7 @@ class Drak {
       },
       brightRatio: this.session?.brightRatio ?? null,
       frame: isTop ? 'top' : 'sub',
+      pageDark: this.mode === 'off' && isTop ? this.guard.run('diag', () => pageLooksDark(this.rule().ignore.join(','))) === true : undefined,
     };
   }
 }
