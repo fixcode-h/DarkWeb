@@ -28,6 +28,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - name: Build package
+        # 版本号带上构建序号（如 0.1.0.42），保证每次上传商店的版本都比上一次大
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
         run: npm run build:release
       - name: Resolve tag
         id: meta
@@ -47,3 +50,14 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Drak ${{ steps.meta.outputs.version }}（build ${{ github.run_number }}）" \
             --notes "由 main 分支提交 ${GITHUB_SHA::7} 自动构建。下载 zip 解压后，在 chrome://extensions 打开开发者模式，选择“加载已解压的扩展程序”。"
+      - name: Sync to Chrome Web Store
+        # 没配置密钥时脚本会直接跳过；配置方法见 docs/store/README.md
+        env:
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_SERVICE_ACCOUNT_KEY: ${{ secrets.CWS_SERVICE_ACCOUNT_KEY }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          CWS_PUBLISH: ${{ vars.CWS_PUBLISH }}
+        run: node scripts/cws-publish.mjs release/drak-${{ steps.meta.outputs.version }}.zip

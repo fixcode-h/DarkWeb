@@ -5,7 +5,7 @@
 ## 分支
 
 - `dev`：日常开发，推送后跑 CI（类型检查、单元测试、端到端验收）
-- `main`：发布分支，合并后 GitHub Actions 自动构建、验收并发布扩展包（Releases 里的 `drak-<版本>.zip`）
+- `main`：发布分支，合并后 GitHub Actions 自动构建、验收并发布扩展包（Releases 里的 `drak-<版本>.zip`），配置密钥后还会同步到 Chrome 应用商店，见 [docs/store/README.md](docs/store/README.md)
 
 ## 本地开发
 

@@ -7,6 +7,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:release": "node scripts/build.mjs --zip",
+    "store:publish": "node scripts/cws-publish.mjs",
+    "store:assets": "node scripts/build.mjs && node scripts/store-assets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "node scripts/build.mjs && node test/e2e/run.mjs && node test/e2e/translate.mjs",
