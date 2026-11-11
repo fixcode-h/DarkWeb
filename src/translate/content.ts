@@ -5,7 +5,7 @@
  * 整段连同行内标签一起交给引擎，译文再按标签还原，这样语序可以自由调整而链接、加粗不丢。
  * 只翻译视口附近的段落，滚动到哪里翻到哪里；页面后续新增的内容自动跟进。
  */
-import { looksLikeTarget, sameLang, worthTranslating } from './lang';
+import { looksLikeIdentifier, looksLikeTarget, sameLang, worthTranslating } from './lang';
 import {
   ENGINE_NAMES,
   TRANSLATE_KEY,
@@ -311,7 +311,7 @@ class PageTranslator {
     };
     const html = nodes.map(ser).join('').trim();
     text = text.trim();
-    if (!worthTranslating(text) || looksLikeTarget(text, this.settings.target)) return;
+    if (!worthTranslating(text) || looksLikeTarget(text, this.settings.target) || looksLikeIdentifier(text) || this.isLinkName(anchor, nodes, text)) return;
     const run: Run = { parent, anchor, nodes, text, html, map, state: 'pending', inserted: [], replaced: false };
     this.runs.add(run);
     for (const n of nodes) this.nodeRun.set(n, run);
@@ -321,6 +321,26 @@ class PageTranslator {
     // 重新观察一次，保证已经在视口里的元素也会收到通知
     this.io?.unobserve(anchor);
     this.io?.observe(anchor);
+  }
+
+  /**
+   * 链接文字就是链接地址的最后一段（GitHub 文件列表里的 `build`、`scripts`，仓库名、用户名）：是名字不是句子，不翻。
+   */
+  private isLinkName(anchor: Element, nodes: Node[], text: string): boolean {
+    if (/\s/.test(text)) return false;
+    let link: Element | null = null;
+    if (nodes.length === 1 && nodes[0].nodeType === Node.ELEMENT_NODE && (nodes[0] as Element).tagName === 'A') link = nodes[0] as Element;
+    else link = anchor.closest('a');
+    const href = link?.getAttribute('href');
+    if (!href) return false;
+    try {
+      const path = new URL(href, location.href).pathname.replace(/\/+$/, '');
+      const last = decodeURIComponent(path.slice(path.lastIndexOf('/') + 1));
+      // 区分大小写：文档目录里“Installation”指向 /installation 的仍是要翻的标题
+      return last === text;
+    } catch {
+      return false;
+    }
   }
 
   private onIntersect(entries: IntersectionObserverEntry[]): void {

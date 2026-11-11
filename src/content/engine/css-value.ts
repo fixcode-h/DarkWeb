@@ -20,7 +20,7 @@ export interface RewriteResult {
   urls: string[];
 }
 
-const COLOR_FUNCS = new Set(['rgb', 'rgba', 'hsl', 'hsla']);
+const COLOR_FUNCS = new Set(['rgb', 'rgba', 'hsl', 'hsla', 'hwb', 'oklch', 'oklab', 'lch', 'lab']);
 
 function isIdentChar(ch: string): boolean {
   return /[a-zA-Z0-9_\-]/.test(ch) || ch.charCodeAt(0) > 127;
@@ -92,6 +92,78 @@ export function stripUrl(raw: string): string {
   let u = raw.trim();
   if ((u.startsWith('"') && u.endsWith('"')) || (u.startsWith("'") && u.endsWith("'"))) u = u.slice(1, -1);
   return u;
+}
+
+/**
+ * 通道是常量、只有透明度用 var() 的颜色，例如 Tailwind v3 的 `rgb(255 255 255/var(--tw-bg-opacity))`、
+ * `rgba(0,0,0,var(--a))`：按不透明颜色改写通道，透明度表达式原样保留。
+ */
+function transformVarAlpha(fn: string, inner: string, role: Role, tx: ColorTransformer): string | null {
+  if (!inner.includes('var(')) return null;
+  let channels: string;
+  let alpha: string;
+  const slash = splitTopLevel(inner, '/');
+  if (slash.length === 2) {
+    channels = slash[0].trim();
+    alpha = slash[1].trim();
+  } else {
+    const parts = splitTopLevel(inner);
+    if (parts.length !== 4) return null;
+    channels = parts.slice(0, 3).join(',');
+    alpha = parts[3].trim();
+  }
+  if (!alpha || channels.includes('var(') || channels.includes('(')) return null;
+  const base = fn === 'rgba' ? 'rgb' : fn === 'hsla' ? 'hsl' : fn;
+  const t = tx.transform(`${base}(${channels})`, role);
+  if (!t) return null;
+  const m = /^rgba?\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)$/.exec(t);
+  if (!m) return null;
+  // 改写后自带透明度（例如阴影角色）时与原透明度相乘
+  const a = m[4] !== undefined ? `calc(${m[4]} * ${alpha})` : alpha;
+  return `rgb(${m[1]} ${m[2]} ${m[3]} / ${a})`;
+}
+
+/** 通道变量的影子变量名：`--drak-bg-hsl---background` */
+export function channelVarName(role: Role, fn: 'rgb' | 'hsl', name: string): string {
+  return `${SHADOW_VAR_PREFIX}${role}-${fn}-${name}`;
+}
+
+const CHANNEL_PART = /^-?(\d+\.?\d*|\.\d+)(%|deg)?$/;
+
+/**
+ * 变量里只存颜色通道的写法（shadcn/ui 的 `--background: 0 0% 100%`、Vercel Geist 的 `--x-value: 0, 0%, 98%`、
+ * Tailwind 的 `--color: 255 255 255`）：按 hsl / rgb 两种解释各算出改写后的完整颜色，
+ * 供使用处 `hsl(var(--background))` 引用。返回 [变量名后缀, 原颜色] 列表。
+ */
+export function channelVarCandidates(value: string): Array<['rgb' | 'hsl', string]> {
+  const v = value.trim();
+  if (!v || v.length > 40 || /[^\d.,%\sdeg-]/.test(v)) return [];
+  const parts = v.includes(',') ? v.split(',').map((x) => x.trim()) : v.split(/\s+/);
+  if (parts.length !== 3 || !parts.every((x) => CHANNEL_PART.test(x))) return [];
+  const out: Array<['rgb' | 'hsl', string]> = [];
+  if (!parts[0].endsWith('%') && !parts[0].endsWith('deg') && parts[1].endsWith('%') && parts[2].endsWith('%')) out.push(['hsl', `hsl(${v})`]);
+  const pcts = parts.filter((x) => x.endsWith('%')).length;
+  if (parts.every((x) => !x.endsWith('deg')) && (pcts === 0 || pcts === 3)) out.push(['rgb', `rgb(${v})`]);
+  return out;
+}
+
+/** 使用处：`hsl(var(--x))`、`hsl(var(--x) / 0.5)`、`hsla(var(--x), 1)`、`rgb(var(--x) / var(--tw-bg-opacity))` */
+function channelVarColor(fn: string, inner: string, whole: string, role: Role): string | null {
+  const base = fn === 'rgba' || fn === 'rgb' ? 'rgb' : fn === 'hsla' || fn === 'hsl' ? 'hsl' : null;
+  if (!base) return null;
+  let parts = splitTopLevel(inner, '/');
+  if (parts.length === 1) parts = splitTopLevel(inner);
+  if (parts.length > 2) return null;
+  const m = /^var\(\s*(--[\w-]+)\s*\)$/.exec(parts[0].trim());
+  if (!m || m[1].startsWith(SHADOW_VAR_PREFIX)) return null;
+  const shadow = `var(${channelVarName(role, base, m[1])}, ${base}(var(${m[1]})))`;
+  const alpha = parts[1]?.trim();
+  if (!alpha || alpha === '1' || alpha === '100%') return `var(${channelVarName(role, base, m[1])}, ${whole})`;
+  let pct: string;
+  if (/^(\d+\.?\d*|\.\d+)$/.test(alpha)) pct = `${Math.round(parseFloat(alpha) * 10000) / 100}%`;
+  else if (/^(\d+\.?\d*|\.\d+)%$/.test(alpha)) pct = alpha;
+  else pct = `calc(${alpha} * 100%)`;
+  return `color-mix(in srgb, ${shadow} ${pct}, transparent)`;
 }
 
 /**
@@ -174,7 +246,7 @@ export function rewriteValue(value: string, role: Role, tx: ColorTransformer, ba
         }
         if (COLOR_FUNCS.has(lower)) {
           const whole = s.slice(i, end + 1);
-          const t = tx.transform(whole, role);
+          const t = tx.transform(whole, role) ?? transformVarAlpha(lower, inner, role, tx) ?? channelVarColor(lower, inner, whole, role);
           if (t) {
             out += t;
             res.hits++;

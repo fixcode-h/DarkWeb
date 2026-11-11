@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contrastRatio, oklchToRgb, parseColor, rgbToOklch } from '../../src/content/engine/color';
 import { ColorTransformer, buildTheme, mapBgLightness, transformRgba } from '../../src/content/engine/transform';
-import { rewriteValue, roleOfProperty, splitTopLevel } from '../../src/content/engine/css-value';
+import { channelVarCandidates, rewriteValue, roleOfProperty, splitTopLevel } from '../../src/content/engine/css-value';
 
 const theme = buildTheme();
 const tx = () => new ColorTransformer(theme);
@@ -20,8 +20,71 @@ describe('parseColor', () => {
   it('rejects what it cannot handle', () => {
     expect(parseColor('currentColor')).toBeNull();
     expect(parseColor('rgb(var(--x))')).toBeNull();
-    expect(parseColor('lab(50 20 20)')).toBeNull();
+    expect(parseColor('color(display-p3 1 0 0)')).toBeNull();
     expect(parseColor('#ggg')).toBeNull();
+  });
+});
+
+describe('modern color functions', () => {
+  const near = (c: string, hex: string) => {
+    const a = parseColor(c)!;
+    const b = parseColor(hex)!;
+    expect(a).not.toBeNull();
+    expect(Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b)).toBeLessThan(6);
+  };
+  it('parses oklch / oklab / lab / lch / hwb', () => {
+    near('oklch(1 0 0)', '#ffffff');
+    near('oklch(100% 0 0)', '#ffffff');
+    near('oklch(0.628 0.2577 29.23)', '#ff0000');
+    near('oklch(0.985 0.002 247.839)', '#f9fafb'); // Tailwind v4 gray-50
+    near('oklab(0.628 0.2249 0.1258)', '#ff0000');
+    near('lab(54.29 80.82 69.91)', '#ff0000');
+    near('lab(100 0 0)', '#ffffff');
+    near('lch(54.29 106.84 40.85)', '#ff0000');
+    near('hwb(0 0% 0%)', '#ff0000');
+    near('hwb(0 100% 0%)', '#ffffff');
+    expect(parseColor('oklch(0.5 0.1 200 / 50%)')!.a).toBe(0.5);
+  });
+  it('rewrites oklch backgrounds to dark', () => {
+    const r = rewriteValue('oklch(0.985 0.002 247.839)', 'bg', tx());
+    expect(r.hits).toBe(1);
+    expect(L(r.text)).toBeLessThan(0.3);
+  });
+});
+
+describe('var() alpha', () => {
+  it('rewrites Tailwind v3 colors whose alpha is a variable', () => {
+    const r = rewriteValue('rgb(255 255 255/var(--tw-bg-opacity))', 'bg', tx());
+    expect(r.hits).toBe(1);
+    expect(r.text).toMatch(/^rgb\(\d+ \d+ \d+ \/ var\(--tw-bg-opacity\)\)$/);
+    expect(L(r.text.replace(/\/ var\([^)]*\)/, ''))).toBeLessThan(0.3);
+    const f = rewriteValue('rgb(35 39 47 / var(--tw-text-opacity, 1))', 'fg', tx());
+    expect(L(f.text.replace(/\/ var\([^)]*\)/, ''))).toBeGreaterThan(0.7);
+  });
+  it('handles legacy rgba with a variable alpha', () => {
+    const r = rewriteValue('rgba(255, 255, 255, var(--a))', 'bg', tx());
+    expect(r.text).toMatch(/\/ var\(--a\)\)$/);
+  });
+});
+
+describe('channel variables (shadcn / Geist / Tailwind)', () => {
+  it('detects channel-only values', () => {
+    expect(channelVarCandidates('0 0% 100%').map((x) => x[0])).toEqual(['hsl']);
+    expect(channelVarCandidates('0, 0%, 98%').map((x) => x[0])).toEqual(['hsl']);
+    expect(channelVarCandidates('255 255 255').map((x) => x[0])).toEqual(['rgb']);
+    expect(channelVarCandidates('1px 2px 3px')).toEqual([]);
+    expect(channelVarCandidates('#fff')).toEqual([]);
+    expect(channelVarCandidates('0')).toEqual([]);
+  });
+  it('rewrites the use site to the shadow variable with the original as fallback', () => {
+    expect(rewriteValue('hsl(var(--background))', 'bg', tx()).text).toBe('var(--drak-bg-hsl---background, hsl(var(--background)))');
+    expect(rewriteValue('hsla(var(--x-value), 1)', 'fg', tx()).text).toBe('var(--drak-fg-hsl---x-value, hsla(var(--x-value), 1))');
+    expect(rewriteValue('hsl(var(--primary) / 0.5)', 'bg', tx()).text).toBe(
+      'color-mix(in srgb, var(--drak-bg-hsl---primary, hsl(var(--primary))) 50%, transparent)',
+    );
+    expect(rewriteValue('rgb(var(--c) / var(--tw-bg-opacity))', 'bg', tx()).text).toBe(
+      'color-mix(in srgb, var(--drak-bg-rgb---c, rgb(var(--c))) calc(var(--tw-bg-opacity) * 100%), transparent)',
+    );
   });
 });
 

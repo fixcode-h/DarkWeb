@@ -27,6 +27,7 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
 <button id="btn"><i class="material-icons">menu</i> Open menu</button>
 <div class="nowrap" id="nowrap">A fairly long single line title that is truncated</div>
 <p id="br">First line of the address<br>Second line of the address</p>
+<ul><li id="file"><a href="/tree/main/build">build</a></li><li id="fname">CONTRIBUTING.md</li><li id="kebab">eslint-plugin-local</li><li id="nav"><a href="/docs/installation">Installation</a></li></ul>
 <div id="host"></div>
 <p id="far" class="far">This paragraph is far below the viewport</p>
 <script>
@@ -131,6 +132,8 @@ async function main() {
     check('单行截断的容器里译文不另起一行', (await tr(page, 'nowrap'))[0]?.block === false);
     const br = await tr(page, 'br');
     check('换行分隔的每一行各自翻译', br.length === 2 && br[0].text.includes('First line') && br[1].text.includes('Second line'), JSON.stringify(br));
+    check('文件名、链接到同名地址的名字不翻译', (await tr(page, 'file')).length === 0 && (await tr(page, 'fname')).length === 0 && (await tr(page, 'kebab')).length === 0);
+    check('文档目录里的标题照常翻译', (await tr(page, 'nav')).length === 1 || (await page.evaluate(() => !!document.querySelector('#nav font.drak-tr'))));
     check('Shadow DOM 内的文字也翻译', await page.evaluate(() => document.getElementById('host').shadowRoot.querySelector('font.drak-tr')?.textContent === '【译:Text inside a shadow root】'));
     check('视口之外的段落先不翻译', (await tr(page, 'far')).length === 0);
 
