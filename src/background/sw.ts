@@ -3,6 +3,7 @@
  */
 import { classify, classifySvgText, computeStats, type ImageClass } from '../shared/image-stats';
 import type { AnalyzeResponse, FetchCssResponse, InvertResponse, Request } from '../shared/messages';
+import '../translate/background';
 import { DEFAULT_SETTINGS, SETTINGS_KEY, normalizeSettings, type Settings } from '../shared/settings';
 
 const MAX_CSS_BYTES = 4 * 1024 * 1024;
