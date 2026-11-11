@@ -35,15 +35,16 @@ interface Preset {
 }
 
 export const THEME_PRESETS: Record<ThemePreset, Preset> = {
-  default: { bgBase: 0.16, bgSpan: 0.08, hue: 0, chroma: 0, fgChroma: 0 },
+  // 底色亮度 = bgBase + bgSpan × 背景亮度/100；滑杆 50 时与旧版一致，范围放宽到原来的 2.5 倍，拖动能明显看出变化
+  default: { bgBase: 0.1, bgSpan: 0.2, hue: 0, chroma: 0, fgChroma: 0 },
   // 纯黑：默认亮度下白底直接映射到 #000，适合 OLED 屏；层级靠 γ 曲线拉开
-  black: { bgBase: -0.04, bgSpan: 0.08, hue: 0, chroma: 0, fgChroma: 0 },
+  black: { bgBase: -0.1, bgSpan: 0.2, hue: 0, chroma: 0, fgChroma: 0 },
   // 柔和灰：底色更亮，明暗反差小
-  soft: { bgBase: 0.25, bgSpan: 0.08, hue: 0, chroma: 0, fgChroma: 0 },
+  soft: { bgBase: 0.19, bgSpan: 0.2, hue: 0, chroma: 0, fgChroma: 0 },
   // 暖色护眼：棕调底色 + 米色文字，减少蓝光
-  warm: { bgBase: 0.19, bgSpan: 0.08, hue: 65, chroma: 0.018, fgChroma: 0.03 },
+  warm: { bgBase: 0.13, bgSpan: 0.2, hue: 65, chroma: 0.018, fgChroma: 0.03 },
   // 午夜蓝
-  blue: { bgBase: 0.17, bgSpan: 0.08, hue: 260, chroma: 0.03, fgChroma: 0.015 },
+  blue: { bgBase: 0.11, bgSpan: 0.2, hue: 260, chroma: 0.03, fgChroma: 0.015 },
 };
 
 export interface ThemeOptions {
@@ -66,9 +67,11 @@ export function buildTheme(opts: ThemeOptions = DEFAULT_THEME_OPTIONS): Theme {
   const s = clamp(opts.saturation ?? 50, 0, 100);
   const bgMin = Math.max(0, p.bgBase + p.bgSpan * b); // 默认 0.20
   const bgMax = bgMin + 0.19; // 默认 0.39
-  const fgMax = 0.85 + 0.12 * c; // 默认 0.91
+  // 文字对比度：0 -> 0.79（柔和），50 -> 0.91（默认），100 -> 1（纯白）；文字层级的跨度也随之收放
+  // 背景调得很亮时文字至少要比背景亮出一截，对比度调到最低也保证可读
+  const fgMax = Math.min(1, Math.max(0.91 + 0.24 * (c - 0.5), bgMax + 0.39));
   // 保证最亮背景 + 最暗文字仍有 >= 4.5:1
-  const fgMin = Math.max(fgMax - 0.18, bgMax + 0.39);
+  const fgMin = Math.max(fgMax - (0.1 + 0.16 * c), bgMax + 0.39);
   return {
     bgMin,
     bgMax,

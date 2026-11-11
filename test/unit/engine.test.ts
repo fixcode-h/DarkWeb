@@ -152,6 +152,25 @@ describe('theme presets', () => {
       }
     }
   });
+  it('readability holds at every contrast setting', () => {
+    for (const p of presets) {
+      for (const brightness of [0, 100]) {
+        for (const contrast of [0, 100]) {
+          const t = buildTheme({ brightness, contrast, theme: p });
+          const bg = transformRgba(parseColor('#e3e5e7')!, 'bg', t);
+          for (const f of ['#121212', '#8590a6']) {
+            expect(contrastRatio(transformRgba(parseColor(f)!, 'fg', t), bg), `${p}/${brightness}/${contrast}: ${f}`).toBeGreaterThanOrEqual(4.5);
+          }
+        }
+      }
+    }
+  });
+  it('brightness and contrast sliders make a visible difference', () => {
+    const page = (brightness: number) => rgbToOklch(transformRgba(parseColor('#fff')!, 'bg', buildTheme({ brightness, contrast: 50 }))).l;
+    expect(page(100) - page(0)).toBeGreaterThanOrEqual(0.18);
+    const text = (contrast: number) => rgbToOklch(transformRgba(parseColor('#000')!, 'fg', buildTheme({ brightness: 50, contrast }))).l;
+    expect(text(100) - text(0)).toBeGreaterThanOrEqual(0.18);
+  });
   it('black maps a white page to pure black', () => {
     const out = transformRgba(parseColor('#fff')!, 'bg', buildTheme({ brightness: 50, contrast: 50, theme: 'black' }));
     expect(Math.max(out.r, out.g, out.b)).toBeLessThanOrEqual(1);
