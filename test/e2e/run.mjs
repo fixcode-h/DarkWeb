@@ -184,7 +184,7 @@ async function main() {
       check('知乎：自检亮区占比 ≤ 3%', d.brightRatio !== null && d.brightRatio <= 0.03, String(d.brightRatio));
 
       // 关闭本站 -> 完全还原
-      await setSettings({ siteModes: { 'zhihu.com': 'off' } });
+      await setSettings({ siteModes: { [`zhihu.com:${port}`]: 'off' } });
       await page.waitForTimeout(400);
       const off = await page.evaluate(() => {
         const c = document.querySelector('#card2');
@@ -292,13 +292,85 @@ async function main() {
       await dark.close();
     }
 
+    // ---------- 网站自带暗色：不叠加 ----------
+    {
+      const state = async (page) => {
+        const d = await diag(page);
+        return `${d.mode}/${d.reason}`;
+      };
+      for (const [path, name] of [['darkwrap', 'body 透明、包裹层深色'], ['darkscheme', '只声明 color-scheme: dark'], ['darkgray', '深灰主题']]) {
+        const page = await open(`http://127.0.0.1:${port}/${path}`, 800);
+        const st = await state(page);
+        const r = await page.evaluate(() => ({ adopted: document.adoptedStyleSheets.length, scheme: getComputedStyle(document.documentElement).colorScheme, bg: getComputedStyle(document.querySelector('#app') || document.body).backgroundColor }));
+        check(`自带暗色（${name}）：自动跳过，不叠加`, st === 'off/page-already-dark' && r.adopted === 0, `${st} / ${JSON.stringify(r)}`);
+        await page.close();
+      }
+      {
+        const page = await open(`http://127.0.0.1:${port}/hero`, 1800);
+        const st = await state(page);
+        const below = await page.evaluate(() => window.__t.info(document.querySelector('#content')).bgLum);
+        check('浅色网站的深色头图：仍按浅色网站处理', st.startsWith('dynamic/') && below < 0.03, `${st} / ${below.toFixed(4)}`);
+        await page.close();
+      }
+      {
+        // 加载后 200ms 网站自己切到暗色
+        const page = await open(`http://127.0.0.1:${port}/darklate`, 2500);
+        const st = await state(page);
+        const r = await page.evaluate(() => ({ adopted: document.adoptedStyleSheets.length, card: getComputedStyle(document.querySelector('#card')).backgroundColor, body: getComputedStyle(document.body).backgroundColor }));
+        check('自带暗色（加载后才由脚本开启）：识别后让位，颜色是网站自己的', st === 'off/page-already-dark' && r.adopted === 0 && r.card === 'rgb(30, 30, 30)' && r.body === 'rgb(18, 18, 18)', `${st} / ${JSON.stringify(r)}`);
+        // 用户在网站里切回浅色 -> 插件重新接管
+        await page.evaluate(() => window.toggleTheme());
+        await page.waitForTimeout(2500);
+        const st2 = await state(page);
+        const lum2 = await page.evaluate(() => window.__t.info(document.querySelector('#card')).bgLum);
+        check('网站切回浅色后插件重新接管', st2.startsWith('dynamic/') && lum2 < 0.03, `${st2} / ${lum2.toFixed(4)}`);
+        // 再切到暗色 -> 再次让位
+        await page.evaluate(() => window.toggleTheme());
+        await page.waitForTimeout(2500);
+        const st3 = await state(page);
+        const card3 = await page.evaluate(() => getComputedStyle(document.querySelector('#card')).backgroundColor);
+        check('网站再次切到暗色后插件再次让位', st3 === 'off/page-already-dark' && card3 === 'rgb(30, 30, 30)', `${st3} / ${card3}`);
+        await page.close();
+      }
+    }
+
+    // ---------- 按 IP:端口 关闭站点 ----------
+    {
+      const other = await startServer();
+      try {
+        await setSettings({ siteModes: { [`127.0.0.1:${port}`]: 'off' } });
+        await new Promise((r) => setTimeout(r, 500)); // 等内容脚本重新注册
+        const lumOf = async (url) => {
+          const page = await open(url, 600);
+          const r = await page.evaluate(() => ({ lum: window.__t.info(document.body).bgLum, scheme: getComputedStyle(document.documentElement).colorScheme, off: document.documentElement.hasAttribute('data-drak-off') }));
+          await page.close();
+          return r;
+        };
+        const a = await lumOf(`http://127.0.0.1:${port}/plain`);
+        const a2 = await lumOf(`http://127.0.0.1:${port}/plain?other=page#x`);
+        const b = await lumOf(`http://127.0.0.1:${other.port}/plain`);
+        check('关闭 IP:端口：该站点所有页面都不处理（脚本不注入）', a.lum > 0.9 && a2.lum > 0.9 && a.scheme === 'normal' && !a.off, JSON.stringify([a, a2]));
+        check('关闭 IP:端口：同一 IP 的其他端口不受影响', b.lum < 0.03, JSON.stringify(b));
+        // 旧数据：整条网址 / 带 www. 的键，读取时归一成站点键
+        await setSettings({ siteModes: { [`http://127.0.0.1:${other.port}/some/page?x=1`]: 'off' } });
+        await new Promise((r) => setTimeout(r, 500));
+        const c = await lumOf(`http://127.0.0.1:${other.port}/plain`);
+        const d = await lumOf(`http://127.0.0.1:${port}/plain`);
+        check('旧的整条网址记录按站点生效', c.lum > 0.9 && d.lum < 0.03, JSON.stringify([c, d]));
+        await setSettings({ siteModes: {} });
+        await new Promise((r) => setTimeout(r, 500));
+      } finally {
+        other.server.close();
+      }
+    }
+
     // ---------- 防闪白：慢样式表 + 首次/重复访问，逐帧检查 ----------
     {
       const page = await ctx.newPage();
       await page.goto(`http://127.0.0.1:${port}/plain`);
       await page.waitForTimeout(300);
       const analyze = await ctx.newPage();
-      const measure = async (url) => {
+      const measure = async (url, wait = 800) => {
         const cdp = await ctx.newCDPSession(page);
         const frames = [];
         cdp.on('Page.screencastFrame', async (f) => {
@@ -307,7 +379,7 @@ async function main() {
         });
         await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 60, everyNthFrame: 1 });
         await page.goto(url, { waitUntil: 'load' });
-        await page.waitForTimeout(800);
+        await page.waitForTimeout(wait);
         await cdp.send('Page.stopScreencast');
         await cdp.detach();
         if (process.env.DRAK_DEBUG) frames.forEach((f, i) => writeFileSync(join(outDir, `frame-${url.slice(-1)}-${i}.jpg`), Buffer.from(f, 'base64')));
@@ -335,6 +407,9 @@ async function main() {
       await page.waitForTimeout(2500); // 等缓存写入
       const again = await measure(`${Z}?cssdelay=700&visit=2`);
       check('防闪白：重复访问无整屏亮帧', again.length > 0 && again.every((v) => v < 0.5), `${again.length} 帧，最亮 ${Math.max(...again).toFixed(3)}`);
+      // 加载完成后会撤掉样式复查“网站是否自带暗色”，带过渡动画的页面不能因此闪一下
+      const tr = await measure(`http://127.0.0.1:${port}/transition`, 5000);
+      check('防闪白：复查网站自带暗色时无亮帧（页面带过渡动画）', tr.length > 0 && tr.every((v) => v < 0.5), `${tr.length} 帧，最亮 ${Math.max(...tr).toFixed(3)}`);
       await page.close();
       await analyze.close();
     }

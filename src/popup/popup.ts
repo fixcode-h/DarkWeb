@@ -1,5 +1,5 @@
 import type { Diagnostics } from '../shared/messages';
-import { SETTINGS_KEY, normalizeSettings, siteModeFor, type Settings, type SiteMode } from '../shared/settings';
+import { SETTINGS_KEY, normalizeSettings, siteKeyOf, siteModeFor, type Settings, type SiteMode } from '../shared/settings';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -25,15 +25,12 @@ const REASON_TEXT: Record<string, string> = {
 
 let settings: Settings;
 let tabId: number | undefined;
+/** 当前标签页的站点键：域名或 IP，非默认端口时带 :端口 */
 let host = '';
 
 async function save(patch: Partial<Settings>): Promise<void> {
   settings = { ...settings, ...patch };
   await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
-}
-
-function siteKey(): string {
-  return host.replace(/^www\./, '');
 }
 
 async function refreshDiag(): Promise<void> {
@@ -53,11 +50,7 @@ async function main(): Promise<void> {
   settings = normalizeSettings(data[SETTINGS_KEY]);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
-  try {
-    host = tab?.url && /^https?:/.test(tab.url) ? new URL(tab.url).hostname : '';
-  } catch {
-    host = '';
-  }
+  host = tab?.url && /^https?:/.test(tab.url) ? siteKeyOf(tab.url) : '';
   $('host').textContent = host || '此页面不支持';
   ($('siteMode') as HTMLSelectElement).disabled = !host;
 
@@ -76,9 +69,8 @@ async function main(): Promise<void> {
   $<HTMLSelectElement>('siteMode').addEventListener('change', async (e) => {
     const mode = (e.target as HTMLSelectElement).value as SiteMode;
     const siteModes = { ...settings.siteModes };
-    delete siteModes[host];
-    if (mode === 'auto') delete siteModes[siteKey()];
-    else siteModes[siteKey()] = mode;
+    if (mode === 'auto') delete siteModes[host];
+    else siteModes[host] = mode;
     await save({ siteModes });
     if (mode !== 'off' && tabId !== undefined) await chrome.runtime.sendMessage({ type: 'inject', tabId });
     setTimeout(refreshDiag, 300);
