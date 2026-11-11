@@ -209,6 +209,54 @@ async function main() {
       const bright = await page.evaluate(() => window.__t.info(document.querySelector('#card1')).bg.r);
       await setSettings({ brightness: 50 });
       check('知乎：亮度滑杆即时生效', bright > r.cardBg.r, `${r.cardBg.r} -> ${bright}`);
+      await page.waitForTimeout(500);
+
+      // 配色主题
+      const bgOfCard = () => page.evaluate(() => window.__t.info(document.querySelector('#card1')));
+      await setSettings({ theme: 'warm' });
+      await page.waitForTimeout(600);
+      const warm = await bgOfCard();
+      check('主题：暖色主题底色偏暖、文字仍可读', warm.bg.r > warm.bg.b + 4 && warm.contrast >= 4.5, `rgb(${warm.bg.r},${warm.bg.g},${warm.bg.b}) / ${warm.contrast.toFixed(2)}`);
+      await setSettings({ theme: 'black' });
+      await page.waitForTimeout(600);
+      const black = await page.evaluate(() => ({ card: window.__t.info(document.querySelector('#card1')), border: window.__t.borderContrast(document.querySelector('.AppHeader')) }));
+      check('主题：纯黑主题卡片为纯黑、分割线仍可见', black.card.bg.r <= 1 && black.card.contrast >= 4.5 && black.border >= 1.5, `rgb(${black.card.bg.r},${black.card.bg.g},${black.card.bg.b}) / 边框 ${black.border.toFixed(2)}`);
+      await setSettings({ theme: 'default', saturation: 0 });
+      await page.waitForTimeout(600);
+      const grayBtn = await page.evaluate(() => window.__t.parse(getComputedStyle(document.querySelector('#ask')).backgroundColor));
+      check('饱和度：调到 0 后品牌色变灰', Math.max(grayBtn.r, grayBtn.g, grayBtn.b) - Math.min(grayBtn.r, grayBtn.g, grayBtn.b) <= 3, `rgb(${grayBtn.r},${grayBtn.g},${grayBtn.b})`);
+      await setSettings({ saturation: 50, imageBrightness: 60 });
+      await page.waitForTimeout(600);
+      const imgs = await page.evaluate(() => ({ photo: getComputedStyle(document.querySelector('#photo')).filter, shot: getComputedStyle(document.querySelector('#shot')).filter }));
+      check('图片亮度：照片整体压暗，白底图叠加压暗', imgs.photo === 'brightness(0.6)' && /brightness\(0\.48\)/.test(imgs.shot), `${imgs.photo} / ${imgs.shot}`);
+      await setSettings({ imageBrightness: 100 });
+      await page.waitForTimeout(600);
+
+      // 和本站无关的设置变化不应触发整页重算
+      const mark = () => page.evaluate(() => (window.__sheet = document.adoptedStyleSheets.at(-1), document.adoptedStyleSheets.length));
+      const n1 = await mark();
+      await setSettings({ siteModes: { 'example.org': 'off' }, userRules: '[{"match":["example.org"],"mode":"filter"}]' });
+      await page.waitForTimeout(500);
+      const same = await page.evaluate(() => window.__sheet === document.adoptedStyleSheets.at(-1));
+      check('性能：其他网站的设置变化不重算本页', n1 > 0 && same, `sheets ${n1}`);
+      await setSettings({ siteModes: {}, userRules: '[]' });
+
+      // 定时启用：时段外自动关闭，回到时段内恢复
+      const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const now = Date.now();
+      await setSettings({ scheduleEnabled: true, scheduleStart: hhmm(new Date(now + 2 * 3600e3)), scheduleEnd: hhmm(new Date(now + 4 * 3600e3)) });
+      await page.waitForTimeout(600);
+      const dOff = await diag(page);
+      const offBody = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const regOff = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).length);
+      check('定时：时段外页面还原且不再注册内容脚本', dOff.mode === 'off' && dOff.reason === 'scheduled-off' && offBody === 'rgb(246, 246, 246)' && regOff === 0, `${dOff.mode}/${dOff.reason}/${offBody}/注册 ${regOff}`);
+      await setSettings({ scheduleStart: hhmm(new Date(now - 2 * 3600e3)), scheduleEnd: hhmm(new Date(now + 2 * 3600e3)) });
+      await page.waitForTimeout(600);
+      const dOn = await diag(page);
+      const regOn = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).length);
+      check('定时：时段内恢复暗色并重新注册', dOn.mode === 'dynamic' && regOn === 2, `${dOn.mode}/注册 ${regOn}`);
+      await setSettings({ scheduleEnabled: false });
+      await page.waitForTimeout(400);
       await page.close();
     }
 
