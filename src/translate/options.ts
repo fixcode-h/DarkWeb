@@ -1,6 +1,6 @@
 /** 翻译设置页：改动即保存 */
 import { LANGS } from './lang';
-import { ENGINE_NAMES, loadTranslate, saveTranslate, siteKeyOf, type TranslateResponse, type TranslateSettings } from './settings';
+import { ENGINE_NAMES, TRANSLATE_KEY, loadTranslate, normalizeTranslate, saveTranslate, siteKeyOf, type TranslateResponse, type TranslateSettings } from './settings';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 type Field = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -33,6 +33,11 @@ function read(): TranslateSettings {
       model: $<HTMLInputElement>('llmModel').value.trim() || settings.llm.model,
     },
     autoSites: parseSites($<HTMLTextAreaElement>('autoSites').value),
+    fab: {
+      ...settings.fab,
+      enabled: $<HTMLInputElement>('fabEnabled').checked,
+      hiddenSites: parseSites($<HTMLTextAreaElement>('fabHidden').value),
+    },
   };
 }
 
@@ -83,6 +88,15 @@ async function main(): Promise<void> {
   $<HTMLInputElement>('llmKey').value = settings.llm.apiKey;
   $<HTMLInputElement>('llmModel').value = settings.llm.model;
   $<HTMLTextAreaElement>('autoSites').value = settings.autoSites.join('\n');
+  $<HTMLInputElement>('fabEnabled').checked = settings.fab.enabled;
+  $<HTMLTextAreaElement>('fabHidden').value = settings.fab.hiddenSites.join('\n');
+  // 按钮在页面上被拖动、隐藏时，这里跟着刷新
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[TRANSLATE_KEY]) return;
+    settings = normalizeTranslate(changes[TRANSLATE_KEY].newValue);
+    $<HTMLInputElement>('fabEnabled').checked = settings.fab.enabled;
+    if (document.activeElement !== $('fabHidden')) $<HTMLTextAreaElement>('fabHidden').value = settings.fab.hiddenSites.join('\n');
+  });
   for (const el of Array.from(document.querySelectorAll<Field>('select, input, textarea'))) el.addEventListener('change', () => void save());
   $('test').addEventListener('click', () => void test());
 }

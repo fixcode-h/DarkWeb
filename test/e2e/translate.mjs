@@ -194,6 +194,56 @@ async function main() {
     await page.waitForSelector('#p1 > font.drak-tr', { timeout: 5000 });
     check('自动翻译站点：同一 IP:端口 下的其他路径也自动翻译', true);
 
+    // ---- 侧边翻译按钮 ----
+    await setTr({ autoSites: [] });
+    await page.goto(`${base}/`);
+    await page.bringToFront();
+    const fabHost = () => page.evaluate(() => !!document.querySelector('html > div[translate="no"][style*="2147483646"]'));
+    await page.waitForFunction(() => !!document.querySelector('html > div[translate="no"][style*="2147483646"]'));
+    check('侧边按钮：默认显示，挂在 <html> 下不改动 body', !(await page.evaluate(() => document.body.querySelector('div[translate="no"]'))));
+    // 默认停在右侧、视口 62% 高度，半隐藏
+    const fy = Math.round(900 * 0.62);
+    await page.mouse.move(1272, fy);
+    await page.waitForTimeout(300);
+    await page.mouse.click(1255, fy);
+    await page.waitForSelector('#p1 > font.drak-tr', { timeout: 8000 });
+    check('侧边按钮：点一下翻译', true);
+    await page.waitForTimeout(300);
+    await page.mouse.click(1255, fy);
+    await page.waitForFunction(() => !document.querySelector('font.drak-tr'));
+    check('侧边按钮：再点一下显示原文', true);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(root, 'test-results', 'fab.png') });
+
+    await page.mouse.move(1255, fy);
+    await page.mouse.down();
+    await page.mouse.move(600, 400, { steps: 6 });
+    await page.mouse.move(30, 300, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    const fab1 = await sw.evaluate(async () => (await chrome.storage.local.get('translate')).translate.fab);
+    check('侧边按钮：拖到左边，位置记住', fab1.side === 'left' && Math.abs(fab1.y - 300 / 900) < 0.02, JSON.stringify(fab1));
+    check('侧边按钮：拖动不会触发翻译', await page.evaluate(() => !document.querySelector('font.drak-tr')));
+
+    // 悬停后右侧出现菜单，第一项“本站隐藏”
+    await page.mouse.move(26, 300);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(root, 'test-results', 'fab-menu.png') });
+    await page.mouse.click(80, 300 - 14);
+    await page.waitForFunction(() => !document.querySelector('html > div[translate="no"][style*="2147483646"]'));
+    const fab2 = await sw.evaluate(async () => (await chrome.storage.local.get('translate')).translate.fab);
+    check("侧边按钮：本站隐藏", fab2.hiddenSites.length === 1 && fab2.hiddenSites[0] === `127.0.0.1:${port}`, JSON.stringify(fab2.hiddenSites));
+    await page.reload();
+    await page.waitForTimeout(800);
+    check('侧边按钮：隐藏后刷新也不再出现', !(await fabHost()));
+    await setTr({ fab: { ...fab2, hiddenSites: [] } });
+    await page.waitForFunction(() => !!document.querySelector('html > div[translate="no"][style*="2147483646"]'));
+    check('侧边按钮：设置里恢复后立即出现', true);
+    await setTr({ fab: { ...fab2, hiddenSites: [], enabled: false } });
+    await page.waitForFunction(() => !document.querySelector('html > div[translate="no"][style*="2147483646"]'));
+    check('侧边按钮：全局关闭', true);
+    await setTr({ fab: { ...fab2, hiddenSites: [], enabled: true, side: 'right', y: 0.62 } });
+
     // ---- 引擎不可用 ----
     // 换一个目标语言，避开前面已经缓存的译文
     await setTr({ autoSites: [], target: 'ja', llm: { baseUrl: `${base}/v1`, apiKey: '', model: 'fake' } });

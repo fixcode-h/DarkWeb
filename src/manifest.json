@@ -12,6 +12,9 @@
   "options_page": "options.html",
   "permissions": ["storage", "unlimitedStorage", "scripting", "alarms", "contextMenus"],
   "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    { "matches": ["http://*/*", "https://*/*"], "js": ["translate-fab.js"], "run_at": "document_idle", "all_frames": false }
+  ],
   "commands": {
     "toggle-site": {
       "suggested_key": { "default": "Alt+Shift+D" },

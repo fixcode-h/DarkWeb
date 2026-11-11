@@ -22,6 +22,19 @@ export interface TranslateSettings {
   autoSites: string[];
   deeplKey: string;
   llm: LlmConfig;
+  /** 页面侧边的翻译快捷按钮 */
+  fab: FabSettings;
+}
+
+export interface FabSettings {
+  /** 全局显示 */
+  enabled: boolean;
+  /** 停靠在左边还是右边 */
+  side: 'left' | 'right';
+  /** 按钮中心在视口高度上的位置（0-1） */
+  y: number;
+  /** 不显示按钮的站点（站点键） */
+  hiddenSites: string[];
 }
 
 export const TRANSLATE_KEY = 'translate';
@@ -35,6 +48,7 @@ export const DEFAULT_TRANSLATE: TranslateSettings = {
   autoSites: [],
   deeplKey: '',
   llm: { baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini' },
+  fab: { enabled: true, side: 'right', y: 0.62, hiddenSites: [] },
 };
 
 export const ENGINE_NAMES: Record<EngineId, string> = {
@@ -47,23 +61,31 @@ export const ENGINE_NAMES: Record<EngineId, string> = {
 const pick = <T extends string>(v: unknown, allowed: readonly T[], dflt: T): T =>
   allowed.includes(v as T) ? (v as T) : dflt;
 const str = (v: unknown, dflt: string): string => (typeof v === 'string' ? v : dflt);
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x) : []);
 
 export function normalizeTranslate(raw: unknown): TranslateSettings {
   const r = (typeof raw === 'object' && raw ? raw : {}) as Partial<TranslateSettings>;
   const d = DEFAULT_TRANSLATE;
   const llm = (typeof r.llm === 'object' && r.llm ? r.llm : {}) as Partial<LlmConfig>;
+  const fab = (typeof r.fab === 'object' && r.fab ? r.fab : {}) as Partial<FabSettings>;
   return {
     engine: pick(r.engine, ['google', 'microsoft', 'deepl', 'llm'] as const, d.engine),
     target: str(r.target, d.target) || d.target,
     mode: pick(r.mode, ['bilingual', 'replace'] as const, d.mode),
     style: pick(r.style, ['plain', 'dim', 'underline', 'highlight'] as const, d.style),
     fallback: typeof r.fallback === 'boolean' ? r.fallback : d.fallback,
-    autoSites: Array.isArray(r.autoSites) ? r.autoSites.filter((x): x is string => typeof x === 'string' && !!x) : [],
+    autoSites: strings(r.autoSites),
     deeplKey: str(r.deeplKey, ''),
     llm: {
       baseUrl: str(llm.baseUrl, d.llm.baseUrl).trim() || d.llm.baseUrl,
       apiKey: str(llm.apiKey, ''),
       model: str(llm.model, d.llm.model).trim() || d.llm.model,
+    },
+    fab: {
+      enabled: typeof fab.enabled === 'boolean' ? fab.enabled : d.fab.enabled,
+      side: pick(fab.side, ['left', 'right'] as const, d.fab.side),
+      y: typeof fab.y === 'number' && isFinite(fab.y) ? Math.min(0.95, Math.max(0.05, fab.y)) : d.fab.y,
+      hiddenSites: strings(fab.hiddenSites),
     },
   };
 }
@@ -107,5 +129,12 @@ export interface PageStatus {
   done: number;
   engine: EngineId | null;
   error: string;
+}
+/** 翻译脚本在页面上广播的状态（document 上的 CustomEvent，detail 为 JSON 字符串） */
+export const STATE_EVENT = 'drak-tr-state';
+export interface PageState {
+  active: boolean;
+  /** 有请求正在进行 */
+  busy: boolean;
 }
 export type PageCommand = { type: 'tr:start' } | { type: 'tr:stop' } | { type: 'tr:toggle' } | { type: 'tr:status' };
