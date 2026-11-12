@@ -393,6 +393,45 @@ async function main() {
         check(`自带暗色（${name}）：自动跳过，不叠加`, st === 'off/page-already-dark' && r.adopted === 0, `${st} / ${JSON.stringify(r)}`);
         await page.close();
       }
+      for (const [path, name] of [['darkinherit', '包裹层继承黑字、文字各自是白色，带白色 Cookie 浮层'], ['darksections', '各分区各自深色的长页面']]) {
+        const page = await open(`http://127.0.0.1:${port}/${path}`, 800);
+        const st = await state(page);
+        const adopted = await page.evaluate(() => document.adoptedStyleSheets.length);
+        check(`自带暗色（${name}）：自动跳过`, st === 'off/page-already-dark' && adopted === 0, `${st} / ${adopted}`);
+        await page.close();
+      }
+      {
+        // 记住了是暗色网站：再次打开时从一开始就不上色（不再先改一遍再撤掉）
+        const page = await ctx.newPage();
+        await page.addInitScript(() => {
+          window.__drakSeen = [];
+          new MutationObserver(() => window.__drakSeen.push(document.documentElement.getAttribute('data-drak-mode'))).observe(document.documentElement, { attributes: true, attributeFilter: ['data-drak-mode'] });
+        });
+        await page.goto(`http://127.0.0.1:${port}/darksections`, { waitUntil: 'load' });
+        await page.waitForTimeout(1800);
+        const st = await state(page);
+        const seen = await page.evaluate(() => window.__drakSeen.filter(Boolean));
+        check('记住的暗色网站：再次打开直接跳过，全程没有上色', st === 'off/page-already-dark' && seen.length === 0, `${st} / ${JSON.stringify(seen)}`);
+        await page.close();
+      }
+      {
+        // 关掉“自带暗色时自动跳过”：暗色网站也照常处理
+        await setSettings({ skipDarkPages: false });
+        const page = await open(`http://127.0.0.1:${port}/darkgray`, 800);
+        const st = await state(page);
+        check('关闭“自带暗色时自动跳过”后照常配色', st.startsWith('dynamic/'), st);
+        await page.close();
+        await setSettings({ skipDarkPages: true });
+      }
+      {
+        // 弹窗里给本站选了“动态”：同样不再跳过
+        await setSettings({ siteModes: { [`127.0.0.1:${port}`]: 'dynamic' } });
+        const page = await open(`http://127.0.0.1:${port}/darkwrap`, 800);
+        const st = await state(page);
+        check('本站选了“动态”：暗色网站也按插件配色', st === 'dynamic/user-choice', st);
+        await page.close();
+        await setSettings({ siteModes: {} });
+      }
       {
         const page = await open(`http://127.0.0.1:${port}/hero`, 1800);
         const st = await state(page);

@@ -20,6 +20,8 @@ export interface Settings {
   imageBrightness: number;
   /** 大面积白底图降亮度 */
   dimImages: boolean;
+  /** 网站自己已是深色时自动跳过（关掉则一律按插件配色处理） */
+  skipDarkPages: boolean;
   /** 只在指定时段启用 */
   scheduleEnabled: boolean;
   /** 时段起止，'HH:MM'；起点晚于终点表示跨午夜 */
@@ -45,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   saturation: 50,
   imageBrightness: 100,
   dimImages: true,
+  skipDarkPages: true,
   scheduleEnabled: false,
   scheduleStart: '20:00',
   scheduleEnd: '07:00',
@@ -64,6 +67,7 @@ export function normalizeSettings(raw: unknown): Settings {
   s.imageBrightness = clampNum(s.imageBrightness, 30, 100, 100);
   if (!THEME_IDS.includes(s.theme)) s.theme = 'default';
   s.scheduleEnabled = s.scheduleEnabled === true;
+  s.skipDarkPages = s.skipDarkPages !== false;
   if (parseClock(s.scheduleStart) === null) s.scheduleStart = DEFAULT_SETTINGS.scheduleStart;
   if (parseClock(s.scheduleEnd) === null) s.scheduleEnd = DEFAULT_SETTINGS.scheduleEnd;
   s.siteModes = normalizeSiteModes(s.siteModes);

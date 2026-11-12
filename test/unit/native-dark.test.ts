@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { judgeDark, themeAttrChanged, usesDarkScheme, type PointSample } from '../../src/content/native-dark';
+import { judgeDark, themeAttrChanged, unionLength, usesDarkScheme, type PointSample } from '../../src/content/native-dark';
 
-const pts = (n: number, bg: number, fg: number | null): PointSample[] => Array.from({ length: n }, () => ({ bg, fg }));
+const pts = (n: number, bg: number): PointSample[] => Array.from({ length: n }, () => ({ bg }));
 
 describe('usesDarkScheme', () => {
   it('只声明 dark', () => {
@@ -20,29 +20,44 @@ describe('usesDarkScheme', () => {
 
 describe('judgeDark', () => {
   it('深色背景 + 浅色文字', () => {
-    expect(judgeDark(pts(25, 0.01, 0.8), 0.01, 0.8, true)).toBe(true);
+    expect(judgeDark(pts(25, 0.01), 0.01, 0.9, true)).toBe(true);
   });
   it('深灰主题（#36393f 一类）也算', () => {
-    expect(judgeDark(pts(25, 0.04, 0.7), 0.04, 0.7, true)).toBe(true);
+    expect(judgeDark(pts(25, 0.04), 0.04, 0.7, true)).toBe(true);
   });
   it('body 透明、深色画在包裹层上（画布是白的，但深色铺满文档）', () => {
-    expect(judgeDark(pts(25, 0.01, 0.8), 1, 0, true)).toBe(true);
+    expect(judgeDark(pts(25, 0.01), 1, 0.8, true)).toBe(true);
+  });
+  it('包裹层继承了黑色文字、真正的文字是白的（Discord 一类）：按实际文字判断', () => {
+    expect(judgeDark(pts(25, 0.03), 0.03, 0.85, false)).toBe(true);
+  });
+  it('深色背景上没有文字（纯图片 / 视频墙）也算', () => {
+    expect(judgeDark(pts(25, 0.01), 0.01, null, true)).toBe(true);
   });
   it('浅色网站的深色头图只盖住首屏：不算', () => {
-    expect(judgeDark(pts(25, 0.01, 0.9), 1, 0, false)).toBe(false);
+    expect(judgeDark(pts(25, 0.01), 1, 0.9, false)).toBe(false);
   });
   it('普通浅色页面', () => {
-    expect(judgeDark(pts(25, 1, 0.02), 1, 0.02, true)).toBe(false);
+    expect(judgeDark(pts(25, 1), 1, 0, true)).toBe(false);
   });
   it('还有一成以上的亮块（顶栏、卡片仍是白的）：不算', () => {
-    expect(judgeDark([...pts(21, 0.01, 0.8), ...pts(4, 1, 0)], 0.01, 0.8, true)).toBe(false);
+    expect(judgeDark([...pts(21, 0.01), ...pts(4, 1)], 0.01, 0.8, true)).toBe(false);
   });
   it('深底深字（不是暗色主题，只是黑色区块）：不算', () => {
-    expect(judgeDark(pts(25, 0.01, 0.02), 0.01, 0.02, true)).toBe(false);
+    expect(judgeDark(pts(25, 0.01), 0.01, 0.1, true)).toBe(false);
   });
-  it('采样点太少时看画布和 body 文字', () => {
-    expect(judgeDark(pts(2, 1, 0), 0.007, 1, true)).toBe(true);
+  it('采样点太少时看画布和文字', () => {
+    expect(judgeDark(pts(2, 1), 0.007, 1, true)).toBe(true);
+    expect(judgeDark(pts(2, 1), 0.007, null, true)).toBe(false);
     expect(judgeDark([], 1, 0, true)).toBe(false);
+  });
+});
+
+describe('unionLength', () => {
+  it('合并重叠区间', () => {
+    expect(unionLength([[0, 100], [50, 150], [200, 300]])).toBe(250);
+    expect(unionLength([[10, 20], [0, 5]])).toBe(15);
+    expect(unionLength([])).toBe(0);
   });
 });
 

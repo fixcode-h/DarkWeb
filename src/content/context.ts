@@ -21,6 +21,11 @@ export interface Ctx {
   onBgImage(hit: BgImageHit, root: Document | ShadowRoot): void;
   /** 我们自己创建的样式表，扫描时要排除 */
   own: WeakSet<CSSStyleSheet>;
+  /**
+   * 首屏阶段推迟改写大样式表：已有上次访问留下的覆盖缓存时，缓存已经把页面配好色，
+   * 几万条规则的大样式表放到首次绘制之后再改写，不再拖慢首屏。
+   */
+  deferBig: boolean;
 }
 
 /** 元素是否落在 ignore 区域里（跨 Shadow DOM 边界向上找） */

@@ -63,7 +63,8 @@ function showNote(d: Diagnostics | null): void {
     act = { label: '改用动态配色，自己调颜色', run: () => void setSiteMode('dynamic') };
     inactive = true;
   } else if (d?.mode === 'off' && d.reason === 'page-already-dark') {
-    text = '网站本身已是深色，插件没有再叠加一层，所以外观调节不起作用。';
+    text = '网站本身已是深色，插件没有再叠加一层，所以外观调节不起作用。识别错了或者想用自己的配色：';
+    act = { label: '本站仍然启用暗色', run: () => void setSiteMode('dynamic') };
     inactive = true;
   } else if (d?.mode === 'off' && d.pageDark) {
     text = '插件已不再改动本页，但网站自己处于夜间模式，所以看起来仍是暗色。要浅色请在网站自己的设置里切换。';
@@ -134,6 +135,7 @@ function render(): void {
   }
 
   $<HTMLInputElement>('dimImages').checked = settings.dimImages;
+  $<HTMLInputElement>('skipDarkPages').checked = settings.skipDarkPages;
   $<HTMLInputElement>('followSystem').checked = settings.followSystem;
   $<HTMLInputElement>('scheduleEnabled').checked = settings.scheduleEnabled;
   $('times').hidden = !settings.scheduleEnabled;
@@ -173,10 +175,11 @@ async function main(): Promise<void> {
     const b = (e.target as HTMLElement).closest('button');
     if (b?.dataset.mode && host) void setSiteMode(b.dataset.mode as SiteMode);
   });
-  for (const id of ['dimImages', 'followSystem', 'scheduleEnabled'] as const) {
+  for (const id of ['dimImages', 'skipDarkPages', 'followSystem', 'scheduleEnabled'] as const) {
     $<HTMLInputElement>(id).addEventListener('change', async (e) => {
       await save({ [id]: (e.target as HTMLInputElement).checked } as Partial<Settings>);
-      if (id !== 'dimImages') {
+      if (id === 'skipDarkPages') setTimeout(refreshDiag, 300);
+      else if (id !== 'dimImages') {
         // 条件放宽后当前页面可能还没注入过脚本
         if (scheduleActive(settings)) await inject();
         setTimeout(refreshDiag, 300);

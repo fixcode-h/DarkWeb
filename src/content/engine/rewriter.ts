@@ -54,7 +54,11 @@ export interface RewriteOptions {
   onBgImage?: (hit: BgImageHit) => void;
   /** 遇到读不到的跨域 @import 时回调 */
   onBlockedImport?: (href: string) => void;
+  /** 变量定义按全部角色输出影子变量（内联样式用：页面脚本随时改，数量也少） */
+  allVarRoles?: boolean;
 }
+
+const ROLE_BIT: Record<Role, number> = { bg: 1, fg: 2, border: 4, shadow: 8 };
 
 function hasCSS(name: string): boolean {
   return typeof (globalThis as Record<string, unknown>)[name] === 'function';
@@ -64,8 +68,37 @@ function isStyleRule(r: CSSRule): r is CSSStyleRule {
   return r.type === 1;
 }
 
+/** 属性名 -> 角色的缓存：每条规则的每个属性都要查一次 */
+const roleMemo = new Map<string, Role | null>();
+function roleOf(prop: string): Role | null {
+  let r = roleMemo.get(prop);
+  if (r === undefined) {
+    r = roleOfProperty(prop);
+    roleMemo.set(prop, r);
+  }
+  return r;
+}
+
+type ValueResult = ReturnType<typeof rewriteValue>;
+
 export class SheetRewriter {
   private ruleCache = new WeakMap<CSSRule, string>();
+  /**
+   * 每个页面变量在哪些角色下被用到（位掩码）。变量定义只输出被用到的角色的影子变量：
+   * 以前每个颜色变量都按 4 个角色各生成一份，GitHub 这类变量很多的网站样式计算时间因此翻倍。
+   */
+  private varRoles = new Map<string, number>();
+  /** varRoles 新增了角色就加一；含变量定义的规则按它判断缓存是否过期 */
+  varsVersion = 0;
+  /** 含变量定义的规则，生成文本时对应的 varsVersion */
+  private ruleVarsVersion = new WeakMap<CSSRule, number>();
+  /** 处理过的变量定义计数（判断一条规则及其嵌套规则里有没有变量定义） */
+  private varDefs = 0;
+  /**
+   * 值改写缓存：大站点几万条规则里同样的值（#fff、var(--x)、1px solid #eee）反复出现，
+   * 解析一次就够。含 url() 的值和样式表地址有关，不缓存。
+   */
+  private valueCache = new Map<string, ValueResult>();
   /** 一个 rewrite 周期内统计 */
   stats = { rules: 0, decls: 0 };
 
@@ -73,6 +106,35 @@ export class SheetRewriter {
 
   reset(): void {
     this.ruleCache = new WeakMap();
+    this.valueCache.clear();
+  }
+
+  /** 记录变量在某个角色下被用到 */
+  private useVars(names: string[] | undefined, role: Role): void {
+    if (!names) return;
+    const bit = ROLE_BIT[role];
+    for (const n of names) {
+      const cur = this.varRoles.get(n) ?? 0;
+      if (cur & bit) continue;
+      this.varRoles.set(n, cur | bit);
+      this.varsVersion++;
+    }
+  }
+
+  private varUsedAs(name: string, role: Role): boolean {
+    return ((this.varRoles.get(name) ?? 0) & ROLE_BIT[role]) !== 0;
+  }
+
+  private value(value: string, role: Role, base?: string): ValueResult {
+    if (value.includes('url(')) return rewriteValue(value, role, this.tx, base);
+    const key = role + '\u0000' + value;
+    let r = this.valueCache.get(key);
+    if (!r) {
+      r = rewriteValue(value, role, this.tx, base);
+      if (this.valueCache.size > 50_000) this.valueCache.clear();
+      this.valueCache.set(key, r);
+    }
+    return r;
   }
 
   rewriteSheet(rules: CSSRuleList, opts: RewriteOptions): string {
@@ -114,8 +176,14 @@ export class SheetRewriter {
 
   private styleRule(rule: CSSStyleRule, opts: RewriteOptions, wrappers: string[]): string {
     const cached = this.ruleCache.get(rule);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      const v = this.ruleVarsVersion.get(rule);
+      if (v === undefined || v === this.varsVersion) return cached;
+    }
     this.stats.rules++;
+    const defsBefore = this.varDefs;
+    // 记开始时的版本：处理这条规则时新登记的用法（--a: var(--b)）要让它下次重算
+    const versionBefore = this.varsVersion;
     const decls = this.declarations(rule.style, opts, (url, important) =>
       opts.onBgImage?.({ wrappers, selector: rule.selectorText, url, important }),
     );
@@ -124,6 +192,8 @@ export class SheetRewriter {
     if (sub && sub.length) nested = this.rewriteList(sub, { ...opts, ignoreSelector: undefined }, wrappers);
     const text = decls || nested ? `${rule.selectorText} {${decls}${nested}}\n` : '';
     this.ruleCache.set(rule, text);
+    if (this.varDefs > defsBefore) this.ruleVarsVersion.set(rule, versionBefore);
+    else this.ruleVarsVersion.delete(rule);
     return text;
   }
 
@@ -155,25 +225,30 @@ export class SheetRewriter {
       const prop = style[i];
       if (prop.startsWith('--')) {
         if (prop.startsWith('--drak-')) continue;
+        this.varDefs++;
         const value = style.getPropertyValue(prop);
         const important = style.getPropertyPriority(prop) === 'important';
         for (const role of ROLES) {
-          const r = rewriteValue(value, role, this.tx, opts.base);
+          if (!opts.allVarRoles && !this.varUsedAs(prop, role)) continue;
+          const r = this.value(value, role, opts.base);
           if (r.hits > 0) {
             out.push({ prop: shadowVarName(role, prop), value: r.text, important, original: value });
+            // --a: var(--b)：--a 在这个角色下被用到，等于 --b 也被用到
+            this.useVars(r.vars, role);
             this.stats.decls++;
           }
         }
         // 只存通道的变量（`--background: 0 0% 100%`）：给 hsl(var(--background)) 这类使用处准备改写后的完整颜色
         for (const [fn, color] of channelVarCandidates(value)) {
           for (const role of ROLES) {
+            if (!opts.allVarRoles && !this.varUsedAs(prop, role)) continue;
             const t = this.tx.transform(color, role);
             if (t) out.push({ prop: channelVarName(role, fn, prop), value: t, important, original: value });
           }
         }
         continue;
       }
-      const role = roleOfProperty(prop);
+      const role = roleOf(prop);
       if (!role) continue;
       let target = prop;
       let value = style.getPropertyValue(prop);
@@ -187,7 +262,8 @@ export class SheetRewriter {
       if (done.has(target)) continue;
       done.add(target);
       const important = style.getPropertyPriority(target) === 'important';
-      const r = rewriteValue(value, role, this.tx, opts.base);
+      const r = this.value(value, role, opts.base);
+      this.useVars(r.vars, role);
       if (target === 'background-image' && r.urls.length === 1 && r.hits === 0 && onBgUrl) {
         try {
           onBgUrl(new URL(stripUrl(r.urls[0]), opts.base || location.href).href, important);
@@ -232,7 +308,8 @@ export class SheetRewriter {
           const v = frame.style.getPropertyValue(p);
           const role = roleOfProperty(p);
           if (role) {
-            const r = rewriteValue(v, role, this.tx, opts.base);
+            const r = this.value(v, role, opts.base);
+            this.useVars(r.vars, role);
             hits += r.hits;
             decls += `${p}:${r.text};`;
           } else {

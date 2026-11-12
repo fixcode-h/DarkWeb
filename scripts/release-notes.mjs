@@ -37,6 +37,14 @@ for (const c of log) {
   if (!m || m[2] === 'dev') continue;
   const title = c.body.split('\n').map((l) => l.trim()).find(Boolean) || c.subject;
   items.push(`- ${title}（#${m[1]}）`);
+  // 一个 PR 里往往有好几项改动：把它带进来的提交逐条列在下面
+  let subs = [];
+  try {
+    subs = git('log', '--no-merges', '--format=%s', `${c.hash}^1..${c.hash}^2`).split('\n').filter(Boolean).reverse();
+  } catch {
+    subs = [];
+  }
+  for (const sub of subs.slice(0, 15)) if (sub !== title) items.push(`  - ${sub}`);
 }
 // 没有走 PR 的改动：列出普通提交
 if (!items.length) {

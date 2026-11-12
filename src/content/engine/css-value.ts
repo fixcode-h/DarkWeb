@@ -18,6 +18,8 @@ export interface RewriteResult {
   hits: number;
   /** 值里出现了 url() */
   urls: string[];
+  /** 通过影子变量引用到的页面变量名（用来统计每个变量在哪些角色下被用到） */
+  vars?: string[];
 }
 
 const COLOR_FUNCS = new Set(['rgb', 'rgba', 'hsl', 'hsla', 'hwb', 'oklch', 'oklab', 'lch', 'lab']);
@@ -234,9 +236,11 @@ export function rewriteValue(value: string, role: Role, tx: ColorTransformer, ba
             if (fallback !== undefined) {
               const r = rewriteValue(fallback, role, tx, base);
               res.urls.push(...r.urls);
+              if (r.vars) (res.vars ??= []).push(...r.vars);
               fb = `,${r.text}`;
             }
             out += `var(${shadowVarName(role, name)}, var(${name}${fb}))`;
+            (res.vars ??= []).push(name);
             res.hits++;
           } else {
             out += s.slice(i, end + 1);
@@ -246,7 +250,12 @@ export function rewriteValue(value: string, role: Role, tx: ColorTransformer, ba
         }
         if (COLOR_FUNCS.has(lower)) {
           const whole = s.slice(i, end + 1);
-          const t = tx.transform(whole, role) ?? transformVarAlpha(lower, inner, role, tx) ?? channelVarColor(lower, inner, whole, role);
+          let t = tx.transform(whole, role) ?? transformVarAlpha(lower, inner, role, tx);
+          if (!t) {
+            t = channelVarColor(lower, inner, whole, role);
+            const m = t && /var\(\s*(--[\w-]+)/.exec(inner);
+            if (m) (res.vars ??= []).push(m[1]);
+          }
           if (t) {
             out += t;
             res.hits++;
@@ -260,6 +269,7 @@ export function rewriteValue(value: string, role: Role, tx: ColorTransformer, ba
         const r = rewriteValue(inner, role, tx, base);
         res.hits += r.hits;
         res.urls.push(...r.urls);
+        if (r.vars) (res.vars ??= []).push(...r.vars);
         out += `${ident}(${r.text})`;
         i = end + 1;
         continue;

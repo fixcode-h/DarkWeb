@@ -59,7 +59,7 @@ export class InlineStyler {
 
     if (styleAttr) {
       const onBg = this.onBgUrl && el instanceof HTMLElement ? (url: string) => this.onBgUrl!(el, url) : undefined;
-      const decls = this.ctx.rewriter.collect(style, { base: el.baseURI }, onBg);
+      const decls = this.ctx.rewriter.collect(style, { base: el.baseURI, allVarRoles: true }, onBg);
       for (const d of decls) {
         if (d.value === d.original || isOurs(d.prop)) continue;
         record(d.prop);

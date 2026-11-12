@@ -201,7 +201,7 @@ async function main() {
     const fabHost = () => page.evaluate(() => !!document.querySelector('html > div[translate="no"][style*="2147483646"]'));
     await page.waitForFunction(() => !!document.querySelector('html > div[translate="no"][style*="2147483646"]'));
     check('侧边按钮：默认显示，挂在 <html> 下不改动 body', !(await page.evaluate(() => document.body.querySelector('div[translate="no"]'))));
-    // 默认停在右侧、视口 62% 高度，半隐藏
+    // 贴在右边缘、视口 62% 高度，半露出
     const fy = Math.round(900 * 0.62);
     await page.mouse.move(1272, fy);
     await page.waitForTimeout(300);
@@ -215,21 +215,20 @@ async function main() {
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(root, 'test-results', 'fab.png') });
 
-    await page.mouse.move(1255, fy);
+    await page.mouse.move(1265, fy);
     await page.mouse.down();
     await page.mouse.move(600, 400, { steps: 6 });
     await page.mouse.move(30, 300, { steps: 6 });
     await page.mouse.up();
     await page.waitForTimeout(300);
     const fab1 = await sw.evaluate(async () => (await chrome.storage.local.get('translate')).translate.fab);
-    check('侧边按钮：拖到左边，位置记住', fab1.side === 'left' && Math.abs(fab1.y - 300 / 900) < 0.02, JSON.stringify(fab1));
+    check('侧边按钮：上下拖动，位置记住，仍吸附在右边缘', fab1.side === 'right' && Math.abs(fab1.y - 300 / 900) < 0.02, JSON.stringify(fab1));
     check('侧边按钮：拖动不会触发翻译', await page.evaluate(() => !document.querySelector('font.drak-tr')));
-
-    // 悬停后右侧出现菜单，第一项“本站隐藏”
-    await page.mouse.move(26, 300);
+    // 悬停后左侧出现菜单，第一项“本站隐藏”
+    await page.mouse.move(1270, 300);
     await page.waitForTimeout(300);
     await page.screenshot({ path: join(root, 'test-results', 'fab-menu.png') });
-    await page.mouse.click(80, 300 - 14);
+    await page.mouse.click(1205, 300 - 14);
     await page.waitForFunction(() => !document.querySelector('html > div[translate="no"][style*="2147483646"]'));
     const fab2 = await sw.evaluate(async () => (await chrome.storage.local.get('translate')).translate.fab);
     check("侧边按钮：本站隐藏", fab2.hiddenSites.length === 1 && fab2.hiddenSites[0] === `127.0.0.1:${port}`, JSON.stringify(fab2.hiddenSites));
