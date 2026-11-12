@@ -16,8 +16,9 @@ export interface Theme {
   /** 中性色（背景、边框）染上的色相与彩度；彩度为 0 表示不染色 */
   tintHue: number;
   tintChroma: number;
-  /** 中性文字染上的彩度 */
+  /** 中性文字染上的彩度与色相 */
   fgTintChroma: number;
+  fgTintHue: number;
   /** 输出彩度的缩放，1 为保持原样 */
   sat: number;
 }
@@ -32,11 +33,14 @@ interface Preset {
   hue: number;
   chroma: number;
   fgChroma: number;
+  /** 文字的色相，缺省同 hue */
+  fgHue?: number;
 }
 
 export const THEME_PRESETS: Record<ThemePreset, Preset> = {
   // 底色亮度 = bgBase + bgSpan × 背景亮度/100；滑杆 50 时与旧版一致，范围放宽到原来的 2.5 倍，拖动能明显看出变化
-  default: { bgBase: 0.1, bgSpan: 0.2, hue: 0, chroma: 0, fgChroma: 0 },
+  // 默认：极淡的冷灰底（不是死板的纯灰），配一点点暖的米白文字，长时间看不刺眼
+  default: { bgBase: 0.1, bgSpan: 0.2, hue: 262, chroma: 0.008, fgChroma: 0.005, fgHue: 85 },
   // 纯黑：默认亮度下白底直接映射到 #000，适合 OLED 屏；层级靠 γ 曲线拉开
   black: { bgBase: -0.1, bgSpan: 0.2, hue: 0, chroma: 0, fgChroma: 0 },
   // 柔和灰：底色更亮，明暗反差小
@@ -67,23 +71,24 @@ export function buildTheme(opts: ThemeOptions = DEFAULT_THEME_OPTIONS): Theme {
   const s = clamp(opts.saturation ?? 50, 0, 100);
   const bgMin = Math.max(0, p.bgBase + p.bgSpan * b); // 默认 0.20
   const bgMax = bgMin + 0.19; // 默认 0.39
-  // 文字对比度：0 -> 0.79（柔和），50 -> 0.91（默认），100 -> 1（纯白）；文字层级的跨度也随之收放
+  // 文字对比度：0 -> 0.80（柔和），50 -> 0.92（默认），100 -> 1（纯白）
   // 背景调得很亮时文字至少要比背景亮出一截，对比度调到最低也保证可读
-  const fgMax = Math.min(1, Math.max(0.91 + 0.24 * (c - 0.5), bgMax + 0.39));
-  // 保证最亮背景 + 最暗文字仍有 >= 4.5:1
-  const fgMin = Math.max(fgMax - (0.1 + 0.16 * c), bgMax + 0.39);
+  const fgMax = Math.min(1, Math.max(0.92 + 0.24 * (c - 0.5), bgMax + 0.39));
+  // 主次文字拉开层级（以前主次文字只差 0.04，看起来一样亮）；同时保证最亮背景 + 最暗文字仍有 >= 4.5:1
+  const fgMin = Math.max(fgMax - (0.12 + 0.12 * c), bgMax + 0.35);
   return {
     bgMin,
     bgMax,
     fgMin: Math.min(fgMin, fgMax),
     fgMax,
-    // 纯黑主题下底色亮度为 0，边框至少要到 0.28 才看得见
+    // 深色分割线的上限比旧版收敛，不再“一格一格”地显眼；纯黑主题下底色亮度为 0，边框至少要到 0.28 才看得见
     borderMin: Math.max(bgMin + 0.13, 0.28),
-    borderMax: Math.max(bgMin + 0.38, 0.5),
+    borderMax: Math.max(bgMin + 0.34, 0.48),
     gamma: 0.6,
     tintHue: p.hue,
     tintChroma: p.chroma,
     fgTintChroma: p.fgChroma,
+    fgTintHue: p.fgHue ?? p.hue,
     // 0 -> 灰度，50 -> 原样，100 -> 1.4 倍
     sat: s <= 50 ? s / 50 : 1 + ((s - 50) / 50) * 0.4,
   };
@@ -104,9 +109,17 @@ export function mapBgLightness(L: number, t: Theme): number {
   return L * (t.bgMax / 0.5);
 }
 
+/** 浅灰文字（占位、禁用、注释）在白底上本来就是弱化的，映射后也要比正文暗一档 */
+const FG_DIM = 0.07;
+
 export function mapFgLightness(L: number, t: Theme): number {
-  if (L <= 0.6) return t.fgMax - (L / 0.6) * (t.fgMax - t.fgMin);
-  return Math.max(L, t.fgMin);
+  // 幂曲线：#333、#222 这类最常见的正文色贴近最亮档，越浅的灰降得越快，层级更分明
+  if (L <= 0.6) return t.fgMax - Math.pow(L / 0.6, 1.6) * (t.fgMax - t.fgMin);
+  const dim = Math.max(t.fgMin - FG_DIM, t.bgMax + 0.28);
+  if (L <= 0.85) return t.fgMin - ((L - 0.6) / 0.25) * (t.fgMin - dim);
+  // 接近白色的文字多半写在深色或彩色底上（按钮、深色顶栏），保持它原来的亮度
+  const k = (L - 0.85) / 0.15;
+  return Math.max(dim * (1 - k) + L * k, dim);
 }
 
 export function mapBorderLightness(L: number, t: Theme): number {
@@ -122,10 +135,11 @@ export function transformOklch(o: OKLCH, role: Role, t: Theme): OKLCH {
   const out = mapRole(o, role, t);
   if (t.sat !== 1) out.c *= t.sat;
   // 主题染色：只动接近中性的颜色，品牌色和强调色不受影响
-  const tint = role === 'fg' ? t.fgTintChroma : role === 'shadow' ? 0 : t.tintChroma;
+  // 饱和度调到 0 是要纯灰度，染色也一起收掉
+  const tint = (role === 'fg' ? t.fgTintChroma : role === 'shadow' ? 0 : t.tintChroma) * Math.min(1, t.sat);
   if (tint > 0 && out.c < tint) {
     out.c = tint;
-    out.h = t.tintHue;
+    out.h = role === 'fg' ? t.fgTintHue : t.tintHue;
   }
   return out;
 }
@@ -138,16 +152,19 @@ function mapRole(o: OKLCH, role: Role, t: Theme): OKLCH {
       if (a < 0.4 && l < 0.4) {
         return { l: 1, c: Math.min(c, 0.02), h, a: clamp(a * 1.2, 0, 1) };
       }
+      // 彩色按钮、标签：保留品牌色相，亮度压到不刺眼的区间，彩度略收
       if (c >= ACCENT_CHROMA && l >= 0.4) {
-        return { l: clamp(l, 0.45, 0.62), c, h, a };
+        return { l: clamp(l, 0.44, 0.6), c: c * 0.88, h, a };
       }
-      return { l: mapBgLightness(l, t), c: Math.min(c * 0.6, 0.08), h, a };
+      // 浅色的提示条、高亮底（淡黄、淡蓝）：保留一点色调，深色里仍能分辨出是什么提示
+      return { l: mapBgLightness(l, t), c: Math.min(c * 0.75, 0.06), h, a };
     }
     case 'fg': {
       if (c >= ACCENT_CHROMA) {
         const L = a < 1 ? compositeOnWhite(l, a) : l;
         const nl = L >= 0.7 ? L : 0.7 + (0.7 - L) * 0.25;
-        return { l: clamp(nl, 0.7, 0.92), c, h, a: a < 1 ? Math.max(a, 0.85) : a };
+        // 提亮后的高彩度颜色在深底上会发荧光，略降彩度
+        return { l: clamp(nl, 0.7, 0.9), c: c * 0.9, h, a: a < 1 ? Math.max(a, 0.85) : a };
       }
       if (a < 1 && l < 0.5) {
         // rgba(0,0,0,.45) 这类次要文字：按白底合成后的亮度映射，输出不透明色
@@ -160,9 +177,9 @@ function mapRole(o: OKLCH, role: Role, t: Theme): OKLCH {
         return { l: 1, c: Math.min(c, 0.02), h, a: a === 0 ? 0 : clamp(a * 1.6, 0.1, 0.5) };
       }
       if (c >= ACCENT_CHROMA && l >= 0.4) {
-        return { l: clamp(l, 0.5, 0.72), c, h, a };
+        return { l: clamp(l, 0.5, 0.7), c: c * 0.9, h, a };
       }
-      return { l: mapBorderLightness(l, t), c: Math.min(c * 0.6, 0.08), h, a };
+      return { l: mapBorderLightness(l, t), c: Math.min(c * 0.6, 0.06), h, a };
     }
     case 'shadow': {
       const nl = l > 0.6 ? 0.08 : l * 0.5;
