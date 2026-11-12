@@ -93,6 +93,35 @@ function setNativeVerified(ok: boolean): void {
   }
 }
 
+/**
+ * 记住“这一类页面本身就是深色”（按路径第一段区分，和原生暗色确认记录同样放在站点自己的 localStorage）。
+ * 下次打开时从 document_start 起就不上色，省掉整页样式表改写，也不会先被我们改一遍再撤掉；
+ * 页面加载完成后照常复查，网站换回浅色时会清掉记录并重新接管。
+ */
+const DARK_KEY = '__drak_page_dark';
+function readDarkKinds(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(DARK_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function rememberedDark(): boolean {
+  return readDarkKinds().includes(pathKind());
+}
+function rememberDark(dark: boolean): void {
+  try {
+    const kind = pathKind();
+    const list = readDarkKinds().filter((k) => k !== kind);
+    if (dark) list.push(kind);
+    if (list.length) localStorage.setItem(DARK_KEY, JSON.stringify(list.slice(-30)));
+    else localStorage.removeItem(DARK_KEY);
+  } catch {
+    /* 存储不可用时每次都重新判断 */
+  }
+}
+
 /** 页面当前（不含我们的样式）是否已是深色。调用前要先撤掉我们的样式 */
 function pageLooksDark(ignoreSelector: string): boolean {
   return looksDark((el) => isIgnored(el, ignoreSelector));
@@ -158,6 +187,7 @@ class DynamicSession {
       fetchCss: (url) => this.app.fetchCss(url),
       peekCss: (url) => this.app.peekCss(url),
       onBgImage: (hit, root) => this.media.onBgImage(hit, root),
+      deferBig: true,
     };
     this.inline = new InlineStyler(this.ctx);
     this.inline.onBgUrl = (el, url) =>
@@ -209,7 +239,7 @@ class DynamicSession {
     if (this.stopped) return;
     const g = this.ctx.guard;
     g.run('sheets', () => this.syncAll());
-    if (this.pageAlreadyDark()) {
+    if (this.app.detectsPageDark() && this.pageAlreadyDark()) {
       // 原生暗色试探中：页面已变暗说明原生主题生效，交给 app 决定
       this.app.onPageAlreadyDark();
       return;
@@ -218,14 +248,33 @@ class DynamicSession {
     this.enqueue(html);
     // 首屏部分同步处理（最多 30ms），保证第一次绘制前已经是暗色
     this.processWork(30);
+    // 首屏内联样式里的变量用法：同步补上影子变量，赶在第一次绘制前
+    if (this.ctx.rewriter.varsVersion !== this.varsSeen) {
+      this.varsSeen = this.ctx.rewriter.varsVersion;
+      g.run('sheets', () => this.syncAll());
+    }
     html.setAttribute('data-drak-ready', '');
     this.readyAt = performance.now();
-    requestAnimationFrame(() => requestAnimationFrame(() => html.removeAttribute('data-drak-applying')));
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        html.removeAttribute('data-drak-applying');
+        this.releaseBig();
+      }),
+    );
     this.scheduleFlush();
+  }
+
+  /** 首屏已画出：补上推迟的大样式表 */
+  private releaseBig(): void {
+    if (this.stopped || !this.ctx.deferBig) return;
+    this.ctx.deferBig = false;
+    // 放到下一个任务，给页面自己的首屏脚本让出时间
+    this.timers.push(window.setTimeout(() => this.markAllDirty(), 0));
   }
 
   private onLoad(): void {
     if (this.stopped) return;
+    this.releaseBig();
     this.ctx.guard.run('sheets', () => this.syncAll());
     this.timers.push(
       window.setTimeout(() => {
@@ -380,6 +429,16 @@ class DynamicSession {
       const rs = this.roots.get(r);
       if (rs) this.ctx.guard.run('sheets', () => rs.sync());
     }
+    this.checkVars();
+  }
+
+  private varsSeen = 0;
+  /** 有变量在新的角色下被用到：所有根上含变量定义的规则都要补上对应的影子变量 */
+  private checkVars(): void {
+    const v = this.ctx.rewriter.varsVersion;
+    if (v === this.varsSeen) return;
+    this.varsSeen = v;
+    this.markAllDirty();
   }
 
   syncAll(force = false): void {
@@ -400,6 +459,7 @@ class DynamicSession {
     requestAnimationFrame(() => {
       this.flushQueued = false;
       this.ctx.guard.run('elements', () => this.processWork(this.readyAt ? 4 : 8));
+      this.checkVars();
       this.scheduleFlush();
     });
   }
@@ -673,12 +733,17 @@ class Drak {
       // 之前因为页面是深色而跳过：网站切回浅色了就重新接管
       this.rechecks++;
       this.lastRecheck = performance.now();
-      if (!pageLooksDark(this.rule().ignore.join(','))) this.restart();
+      if (!pageLooksDark(this.rule().ignore.join(','))) {
+        // 网站换回了浅色：忘掉记录，重新接管
+        if (isTop) rememberDark(false);
+        this.restart();
+      } else if (isTop) rememberDark(true);
       return;
     }
     const session = this.session;
-    if (this.mode !== 'dynamic' || !session || !session.readyAt || this.nativeProbing) return;
-    if (this.guard.tripped || this.recheckMisses >= 2) return;
+    if (this.mode !== 'dynamic' || !session || !session.readyAt || this.nativeProbing || !this.detectsPageDark()) return;
+    // 只有异常过多降级时不再复查；“页面过重”只是停了图片分析，暗色网站恰恰多是重页面，仍要复查
+    if (this.guard.tripped === 'errors' || this.recheckMisses >= 2) return;
     const rule = session.ctx.rule;
     // 走站点规则原生暗色流程的网站（知乎等）由那套流程自己判断
     if (rule.native) return;
@@ -691,7 +756,15 @@ class Drak {
       // 初筛误报（深色其实是我们改出来的）：恢复动态配色，并且不再反复折腾这个页面
       this.recheckMisses++;
       this.restart();
-    }
+    } else if (isTop) rememberDark(true);
+  }
+
+  /**
+   * 是否需要判断“页面本身已是深色”。用户在弹窗里给本站明确选了“动态”时不判断：
+   * 那是在说“就算网站自己是深色也照样按我的配色来”（比如自动识别误判时的手动纠正）。
+   */
+  detectsPageDark(): boolean {
+    return this.settings.skipDarkPages && siteModeFor(this.settings, site) !== 'dynamic';
   }
 
   private ruleSrc: string | null = null;
@@ -721,6 +794,7 @@ class Drak {
       s.saturation,
       s.imageBrightness,
       s.dimImages,
+      s.skipDarkPages,
       s.scheduleEnabled && [s.scheduleStart, s.scheduleEnd],
       siteModeFor(s, site),
       rule,
@@ -764,6 +838,11 @@ class Drak {
     html.removeAttribute('data-drak-mode');
     if (mode === 'native' && rule.native) {
       this.startNative(rule);
+      return;
+    }
+    // 之前确认过这一类页面本身是深色：直接让位，加载完成后的复查会兜底
+    if (isTop && siteMode === 'auto' && s.skipDarkPages && !rule.mode && !rule.native && rememberedDark()) {
+      this.turnOff('page-already-dark');
       return;
     }
     this.startDynamic(rule);
@@ -846,6 +925,7 @@ class Drak {
       this.firstApplyMs = performance.now() - this.t0;
       return;
     }
+    if (isTop && !this.rule().native) rememberDark(true);
     this.turnOff('page-already-dark');
   }
 

@@ -133,6 +133,18 @@ export function startServer() {
       if (url.pathname === '/darkscheme') return doc('<meta name="color-scheme" content="dark">', `<h1>只声明 color-scheme</h1>${filler}`);
       // 深灰主题
       if (url.pathname === '/darkgray') return doc('<style>body{background:#36393f;color:#dcddde}</style>', `<h1>深灰主题</h1>${filler}`);
+      // body 深色但文字色没设（继承默认黑），真正的文字各自写成白色（Discord 官网一类）+ 一个白色的 Cookie 浮层
+      if (url.pathname === '/darkinherit') {
+        return doc(
+          '<style>body{margin:0;background:#1a2081}h1,p{color:#fff}.wrap{padding:24px}#cookie{position:fixed;right:16px;bottom:16px;width:320px;padding:16px;background:#fff;color:#222}</style>',
+          `<div class="wrap"><div><h1>深色底、文字各自设白色</h1>${filler}</div></div><div id="cookie">本站使用 Cookie</div>`,
+        );
+      }
+      // html/body 都透明、每个分区各自画深色背景的长页面（官网、落地页）
+      if (url.pathname === '/darksections') {
+        const sec = (bg) => `<section style="background:${bg};min-height:700px"><h2>分区</h2><p>说明文字</p></section>`;
+        return doc('<style>body{margin:0;color:#e8e8e8}section{padding:40px}</style>', [sec('#000'), sec('#0b0d12'), sec('#111'), sec('#000'), sec('#15171c')].join(''));
+      }
       // 加载完成后才由脚本套上暗色主题，带过渡动画；window.toggleTheme() 模拟用户在网站里切换
       if (url.pathname === '/darklate') {
         return doc(

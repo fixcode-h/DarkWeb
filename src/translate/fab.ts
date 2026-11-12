@@ -1,8 +1,8 @@
 /**
  * 页面侧边的翻译快捷按钮（静态内容脚本，只在顶层页面运行）。
  *
- * 平时半隐藏贴在屏幕边缘，鼠标移上去滑出；点一下翻译，再点一下显示原文；
- * 按住可以上下拖动，松手吸附到最近的一侧；悬停时旁边出现“本站隐藏”“全部隐藏”。
+ * 贴在屏幕右边缘的半个标签，鼠标移上去整个滑出；点一下翻译，再点一下显示原文；
+ * 按住可以上下拖动（始终吸附在右边缘）；悬停时左边出现“本站隐藏”“全部隐藏”。
  * 按钮放在封闭的 Shadow DOM 里，页面样式和暗色配色都碰不到它。
  */
 import {
@@ -19,34 +19,33 @@ import {
 } from './settings';
 
 const SIZE = 36;
+/** 平时露出的宽度：贴在右边缘的半个标签，鼠标移上去整个滑出 */
+const PEEK = 22;
 const DRAG_THRESHOLD = 5;
 
 const CSS = `
 :host { all: initial; }
 .wrap {
-  position: fixed; z-index: 2147483646; top: 0; display: flex; align-items: center; gap: 6px;
+  position: fixed; z-index: 2147483646; top: 0; right: 0; display: flex; flex-direction: row-reverse; align-items: center; gap: 6px;
   transform: translateY(-50%); font: 12px/1.4 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-  transition: left .18s ease, right .18s ease, opacity .18s;
   -webkit-user-select: none; user-select: none;
 }
-.wrap.right { right: ${-SIZE / 2 + 4}px; flex-direction: row-reverse; }
-.wrap.left { left: ${-SIZE / 2 + 4}px; flex-direction: row; }
-.wrap.open.right, .wrap.dragging.right, .wrap.on.right { right: 8px; }
-.wrap.open.left, .wrap.dragging.left, .wrap.on.left { left: 8px; }
-.wrap:not(.open):not(.on):not(.dragging) { opacity: .55; }
 .btn {
-  position: relative; width: ${SIZE}px; height: ${SIZE}px; border-radius: 50%; border: 1px solid #3a3d44; padding: 0;
-  background: #1f2125; color: #e8e9eb; box-shadow: 0 4px 14px rgba(0, 0, 0, .28); cursor: pointer;
+  position: relative; width: ${SIZE + 6}px; height: ${SIZE}px; border-radius: ${SIZE / 2}px 0 0 ${SIZE / 2}px; padding: 0 6px 0 0;
+  border: 1px solid #3a3d44; border-right: 0; background: #1f2125; color: #e8e9eb;
+  box-shadow: -2px 3px 12px rgba(0, 0, 0, .28); cursor: pointer;
   display: grid; place-items: center; font-weight: 700; font-size: 14px; letter-spacing: -.02em; touch-action: none;
-  transition: background .12s, transform .12s;
+  transform: translateX(${SIZE + 6 - PEEK}px); opacity: .6;
+  transition: transform .18s ease, opacity .18s, background .12s;
 }
+.open .btn, .on .btn, .dragging .btn { transform: none; opacity: 1; }
 .btn:hover { background: #2a2d33; }
-.btn:active { transform: scale(.94); }
-.dragging .btn { cursor: grabbing; transform: scale(1.06); }
+.btn:active { transform: scale(.96); }
+.dragging .btn { cursor: grabbing; }
 .on .btn { background: #f2c94c; border-color: #f2c94c; color: #2a2206; }
 .btn:focus-visible { outline: 2px solid #f2c94c; outline-offset: 2px; }
 .ring {
-  position: absolute; inset: -3px; border-radius: 50%; border: 2px solid transparent; border-top-color: #f2c94c;
+  position: absolute; inset: 4px 10px 4px 4px; border-radius: 50%; border: 2px solid transparent; border-top-color: #f2c94c;
   opacity: 0; animation: spin .8s linear infinite;
 }
 .on .ring { border-top-color: #1f2125; }
@@ -107,7 +106,7 @@ class Fab {
     if (!this.host) this.build();
     // 挂在 <html> 下而不是 <body>：不改动页面自己的内容树
     if (!this.host!.isConnected) document.documentElement.appendChild(this.host!);
-    this.place(this.settings.fab.side, this.settings.fab.y);
+    this.place(this.settings.fab.y);
     this.render();
   }
 
@@ -119,7 +118,7 @@ class Fab {
     host.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483646';
     const root = host.attachShadow({ mode: 'closed' });
     root.innerHTML = `<style>${CSS}</style>
-      <div class="wrap right" part="wrap">
+      <div class="wrap" part="wrap">
         <button class="btn" type="button" aria-label="翻译此页面"><span class="ring"></span><span class="label">译</span></button>
         <div class="menu">
           <button type="button" data-act="site">本站隐藏</button>
@@ -155,9 +154,8 @@ class Fab {
     else this.closeTimer = window.setTimeout(() => this.wrap.classList.remove('open'), 250);
   }
 
-  private place(side: FabSettings['side'], y: number): void {
-    this.wrap.classList.toggle('right', side === 'right');
-    this.wrap.classList.toggle('left', side === 'left');
+  /** 始终贴在右边缘，只记上下位置 */
+  private place(y: number): void {
     this.wrap.style.top = `${Math.round(y * 1000) / 10}vh`;
   }
 
@@ -189,8 +187,7 @@ class Fab {
       if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_THRESHOLD) return;
       moved = true;
       this.wrap.classList.add('dragging');
-      const side = ev.clientX < window.innerWidth / 2 ? 'left' : 'right';
-      this.place(side, clampY(ev.clientY / window.innerHeight));
+      this.place(clampY(ev.clientY / window.innerHeight));
     };
     const up = (ev: PointerEvent) => {
       this.btn.removeEventListener('pointermove', move);
@@ -201,8 +198,7 @@ class Fab {
         if (ev.type === 'pointerup') this.toggle();
         return;
       }
-      const side = ev.clientX < window.innerWidth / 2 ? 'left' : 'right';
-      void this.save({ side, y: clampY(ev.clientY / window.innerHeight) });
+      void this.save({ side: 'right', y: clampY(ev.clientY / window.innerHeight) });
     };
     this.btn.addEventListener('pointermove', move);
     this.btn.addEventListener('pointerup', up);

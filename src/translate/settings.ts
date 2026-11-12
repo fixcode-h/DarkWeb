@@ -83,7 +83,8 @@ export function normalizeTranslate(raw: unknown): TranslateSettings {
     },
     fab: {
       enabled: typeof fab.enabled === 'boolean' ? fab.enabled : d.fab.enabled,
-      side: pick(fab.side, ['left', 'right'] as const, d.fab.side),
+      // 按钮固定吸附在右边缘（以前可以拖到左边，旧设置一律当作右边）
+      side: 'right',
       y: typeof fab.y === 'number' && isFinite(fab.y) ? Math.min(0.95, Math.max(0.05, fab.y)) : d.fab.y,
       hiddenSites: strings(fab.hiddenSites),
     },

@@ -10,6 +10,32 @@ import type { RootSheets } from './sheets';
 
 const ATTR = 'data-drak-img';
 const MAX_BG_ANALYSIS = 60;
+const JPEG = /\.jpe?g(?:$|[?#@!_])/i;
+
+/**
+ * 页面加载完成（load 之后再等一次空闲）。跨域图片要由后台重新下载一份来采样，
+ * 放在页面自己加载期间做会和页面抢带宽，图片多的网站因此明显变慢。
+ */
+let afterLoad: Promise<void> | null = null;
+function pageLoaded(): Promise<void> {
+  if (!afterLoad) {
+    afterLoad = new Promise<void>((resolve) => {
+      const idle = () => ('requestIdleCallback' in window ? requestIdleCallback(() => resolve(), { timeout: 2000 }) : setTimeout(resolve, 300));
+      if (document.readyState === 'complete') idle();
+      else window.addEventListener('load', idle, { once: true });
+    });
+  }
+  return afterLoad;
+}
+
+/**
+ * 不用下载就能断定保持原样的图片：JPEG 没有透明通道，不可能是“透明底深色图形”；
+ * 关掉“白底图降亮度”或者图片太小时也不会被压暗。
+ */
+export function obviouslyKeep(url: string, naturalW: number, naturalH: number, dimImages: boolean): boolean {
+  if (!JPEG.test(url)) return false;
+  return !dimImages || naturalW * naturalH < 200 * 200;
+}
 
 export class MediaAnalyzer {
   private cache = new Map<string, Promise<ImageClass>>();
@@ -88,7 +114,11 @@ export class MediaAnalyzer {
   private classifyImg(url: string, img: HTMLImageElement): Promise<ImageClass> {
     let p = this.cache.get(url);
     if (!p) {
-      p = this.localClassify(img).then((local) => local ?? this.remoteClassify(url));
+      p = this.localClassify(img).then((local) => {
+        if (local) return local;
+        if (obviouslyKeep(url, img.naturalWidth, img.naturalHeight, this.ctx.settings.dimImages)) return 'keep';
+        return this.remoteClassify(url);
+      });
       this.cache.set(url, p);
     }
     return p;
@@ -116,6 +146,8 @@ export class MediaAnalyzer {
 
   private async remoteClassify(url: string): Promise<ImageClass> {
     if (!/^https?:/i.test(url)) return 'keep';
+    await pageLoaded();
+    if (this.stopped) return 'keep';
     try {
       const res = (await chrome.runtime.sendMessage({ type: 'analyze-image', url, dimImages: this.ctx.settings.dimImages })) as AnalyzeResponse;
       return res?.ok && res.cls ? res.cls : 'keep';
