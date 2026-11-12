@@ -113,6 +113,22 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 chrome.runtime.onStartup.addListener(scheduleRegister);
 
+// ---- 右键菜单：开关本站暗色 ----
+const DARK_MENU_ID = 'drak-toggle-site';
+function createDarkMenu(): void {
+  chrome.contextMenus?.create(
+    { id: DARK_MENU_ID, title: '暗色模式：开关本站（Alt+Shift+D）', contexts: ['page'], documentUrlPatterns: ['http://*/*', 'https://*/*'] },
+    () => void chrome.runtime.lastError,
+  );
+}
+chrome.runtime.onInstalled.addListener(createDarkMenu);
+chrome.runtime.onStartup.addListener(createDarkMenu);
+chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== DARK_MENU_ID || !tab?.url || !/^https?:/.test(tab.url)) return;
+  const s = await toggleSite(tab.url);
+  if (siteModeFor(s, tab.url) !== 'off' && tab.id !== undefined) await injectInto(tab.id);
+});
+
 let lastRegKey = '';
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[SETTINGS_KEY]) return;

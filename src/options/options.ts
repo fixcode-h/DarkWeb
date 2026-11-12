@@ -44,6 +44,7 @@ function render(): void {
   $<HTMLInputElement>('followSystem').checked = settings.followSystem;
   $<HTMLInputElement>('scheduleEnabled').checked = settings.scheduleEnabled;
   $<HTMLInputElement>('dimImages').checked = settings.dimImages;
+  $<HTMLInputElement>('skipDarkPages').checked = settings.skipDarkPages;
   $<HTMLInputElement>('scheduleStart').value = settings.scheduleStart;
   $<HTMLInputElement>('scheduleEnd').value = settings.scheduleEnd;
   $('times').classList.toggle('muted', !settings.scheduleEnabled);
@@ -107,7 +108,7 @@ async function load(): Promise<void> {
   render();
   void renderCache();
 
-  for (const id of ['enabled', 'followSystem', 'scheduleEnabled', 'dimImages'] as const) {
+  for (const id of ['enabled', 'followSystem', 'scheduleEnabled', 'dimImages', 'skipDarkPages'] as const) {
     $<HTMLInputElement>(id).addEventListener('change', (e) => void save({ [id]: (e.target as HTMLInputElement).checked } as Partial<Settings>));
   }
   for (const id of ['scheduleStart', 'scheduleEnd'] as const) {

@@ -16,21 +16,25 @@ export class Guard {
   /** 首次完整应用阶段的主线程累计耗时 */
   startupMs = 0;
   private startupOpen = true;
+  /** 嵌套调用深度：只统计最外层，避免同一段耗时被重复累加（曾因此把普通页面误判为超慢页面） */
+  private depth = 0;
 
   constructor(private onTrip: (reason: TripReason) => void) {}
 
   run<T>(name: string, fn: () => T): T | undefined {
     if (this.tripped === 'errors') return undefined;
     const t0 = performance.now();
+    this.depth++;
     try {
       return fn();
     } catch (e) {
       this.error(e, name);
       return undefined;
     } finally {
+      this.depth--;
       const dt = performance.now() - t0;
       this.timings[name] = (this.timings[name] || 0) + dt;
-      if (this.startupOpen) {
+      if (this.startupOpen && this.depth === 0) {
         this.startupMs += dt;
         // 首次应用预算 80ms，超过 3 倍判定为超慢页面
         if (this.startupMs > 240 && !this.tripped) this.trip('slow');
