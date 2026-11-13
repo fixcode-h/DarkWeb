@@ -10,7 +10,7 @@
 | 简短说明 | 取自 manifest 的 `description`（上限 132 字符） |
 | 类别 | 无障碍（Accessibility）。备选：工具（Tools） |
 | 语言 | 中文（简体） |
-| 商店图标 | 128x128，用包里的 `icons/icon-128.png`（`npm run build` 后在 `dist/icons/`） |
+| 商店图标 | 128x128，用 [assets/icon-128.png](assets/icon-128.png)。不要用截图或宣传图，尺寸不对会报“图片尺寸不正确” |
 | 截图 | `docs/store/assets/screenshot-1.png`、`screenshot-2.png`（1280x800，至少 1 张，最多 5 张） |
 | 小宣传图 | `docs/store/assets/promo-small.png`（440x280） |
 | 首页网址 | `https://github.com/fixcode-h/DarkWeb` |

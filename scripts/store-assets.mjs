@@ -1,10 +1,11 @@
 // 生成 Chrome 应用商店的上架素材到 docs/store/assets/：
 //   screenshot-1.png / screenshot-2.png  1280x800 截图（中性演示页，前后对比 + 全暗色）
 //   promo-small.png                      440x280 小宣传图
+//   icon-128.png                         128x128 商店图标（复制构建出的 dist/icons/icon-128.png）
 // 用法：npm run store:assets（会先构建 dist/）
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
 const out = join(root, 'docs/store/assets');
 mkdirSync(out, { recursive: true });
+copyFileSync(join(root, 'dist/icons/icon-128.png'), join(out, 'icon-128.png'));
+console.log('wrote docs/store/assets/icon-128.png');
 
 const DEMO = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>演示页</title><style>
 *{box-sizing:border-box}body{margin:0;font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;background:#f4f5f7;color:#1f2329}
