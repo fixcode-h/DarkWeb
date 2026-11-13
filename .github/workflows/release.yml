@@ -48,12 +48,17 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: drak-${{ steps.meta.outputs.version }}
-          path: release/drak-${{ steps.meta.outputs.version }}.zip
+          path: |
+            release/drak-${{ steps.meta.outputs.version }}.zip
+            release/drak-${{ steps.meta.outputs.version }}-store.zip
       - name: Publish GitHub release
+        # 两个包都附上：普通包带 key，用于本地“加载已解压的扩展”时保持固定 ID；
+        # -store.zip 不带 key，手动上传到 Chrome 应用商店时用它（带 key 的包会被商店拒绝）
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ steps.meta.outputs.tag }}" release/drak-${{ steps.meta.outputs.version }}.zip \
+            release/drak-${{ steps.meta.outputs.version }}-store.zip \
             --target "$GITHUB_SHA" \
             --title "Drak ${{ steps.meta.outputs.version }}" \
             --notes-file release/notes.md
