@@ -26,38 +26,64 @@ const DRAG_THRESHOLD = 5;
 const CSS = `
 :host { all: initial; }
 .wrap {
-  position: fixed; z-index: 2147483646; top: 0; right: 0; display: flex; flex-direction: row-reverse; align-items: center; gap: 6px;
+  --bg: rgba(32, 34, 38, .86); --bg-hover: rgba(44, 47, 53, .94); --line: rgba(255, 255, 255, .1);
+  --text: #eceef1; --muted: #a3a8b1; --accent: #f2c94c; --accent-2: #f5b83d; --accent-ink: #2a2206;
+  --shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 1px 3px rgba(0, 0, 0, .2);
+  position: fixed; z-index: 2147483646; top: 0; right: 0; display: flex; flex-direction: row-reverse; align-items: center; gap: 8px;
   transform: translateY(-50%); font: 12px/1.4 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-  -webkit-user-select: none; user-select: none;
+  -webkit-user-select: none; user-select: none; color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  .wrap {
+    --bg: rgba(255, 255, 255, .9); --bg-hover: rgba(246, 247, 249, .98); --line: rgba(15, 20, 30, .1);
+    --text: #1d2026; --muted: #5d636e; --accent-2: #eaa625;
+    --shadow: 0 6px 20px rgba(15, 20, 30, .14), 0 1px 3px rgba(15, 20, 30, .1);
+    color-scheme: light;
+  }
 }
 .btn {
   position: relative; width: ${SIZE + 6}px; height: ${SIZE}px; border-radius: ${SIZE / 2}px 0 0 ${SIZE / 2}px; padding: 0 6px 0 0;
-  border: 1px solid #3a3d44; border-right: 0; background: #1f2125; color: #e8e9eb;
-  box-shadow: -2px 3px 12px rgba(0, 0, 0, .28); cursor: pointer;
-  display: grid; place-items: center; font-weight: 700; font-size: 14px; letter-spacing: -.02em; touch-action: none;
-  transform: translateX(${SIZE + 6 - PEEK}px); opacity: .6;
-  transition: transform .18s ease, opacity .18s, background .12s;
+  border: 1px solid var(--line); border-right: 0; background: var(--bg); color: var(--text);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow: var(--shadow); cursor: pointer;
+  display: grid; place-items: center; font-weight: 600; font-size: 15px; touch-action: none;
+  transform: translateX(${SIZE + 6 - PEEK}px); opacity: .55;
+  transition: transform .26s cubic-bezier(.2, .8, .2, 1), opacity .2s, background .15s, color .15s, box-shadow .2s;
 }
+.label { transition: transform .2s; }
 .open .btn, .on .btn, .dragging .btn { transform: none; opacity: 1; }
-.btn:hover { background: #2a2d33; }
-.btn:active { transform: scale(.96); }
-.dragging .btn { cursor: grabbing; }
-.on .btn { background: #f2c94c; border-color: #f2c94c; color: #2a2206; }
-.btn:focus-visible { outline: 2px solid #f2c94c; outline-offset: 2px; }
-.ring {
-  position: absolute; inset: 4px 10px 4px 4px; border-radius: 50%; border: 2px solid transparent; border-top-color: #f2c94c;
-  opacity: 0; animation: spin .8s linear infinite;
+.btn:hover { background: var(--bg-hover); color: var(--accent-2); }
+.btn:hover .label { transform: scale(1.08); }
+.btn:active .label { transform: scale(.92); }
+.dragging .btn { cursor: grabbing; box-shadow: 0 10px 28px rgba(0, 0, 0, .32); }
+.on .btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: var(--accent-ink);
+  box-shadow: 0 6px 18px rgba(242, 180, 60, .35), 0 1px 3px rgba(0, 0, 0, .2);
 }
-.on .ring { border-top-color: #1f2125; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ring {
+  position: absolute; inset: 4px 10px 4px 4px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent);
+  opacity: 0; transition: opacity .2s; animation: spin .8s linear infinite;
+}
+.on .ring { border-top-color: var(--accent-ink); }
 .busy .ring { opacity: 1; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.menu { display: none; flex-direction: column; gap: 4px; }
-.open:not(.dragging) .menu { display: flex; }
-.menu button {
-  all: unset; cursor: pointer; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
-  background: #1f2125; color: #c9ccd2; border: 1px solid #3a3d44; box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+.menu {
+  display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--line); box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4);
+  opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(8px) scale(.96); transform-origin: right center;
+  transition: opacity .16s, transform .2s cubic-bezier(.2, .8, .2, 1), visibility 0s .2s;
 }
-.menu button:hover { color: #fff; background: #2a2d33; }
+.open:not(.dragging) .menu { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition-delay: 0s; }
+.menu button {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px 6px 8px; border-radius: 7px; white-space: nowrap; color: var(--muted); transition: background .12s, color .12s;
+}
+.menu svg { width: 14px; height: 14px; flex: none; opacity: .8; }
+.menu button:hover, .menu button:focus-visible { color: var(--text); background: var(--line); }
+.menu button:hover svg { opacity: 1; color: var(--accent-2); }
+@media (prefers-reduced-motion: reduce) { .btn, .menu, .label { transition: none; } }
 @media print { .wrap { display: none; } }
 `;
 
@@ -121,8 +147,8 @@ class Fab {
       <div class="wrap" part="wrap">
         <button class="btn" type="button" aria-label="翻译此页面"><span class="ring"></span><span class="label">译</span></button>
         <div class="menu">
-          <button type="button" data-act="site">本站隐藏</button>
-          <button type="button" data-act="all">全部隐藏</button>
+          <button type="button" data-act="site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-2.6 3.4M6.6 6.6C3.9 8.4 2.5 12 2.5 12S6 19 12 19a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>本站隐藏</button>
+          <button type="button" data-act="all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>全部隐藏</button>
         </div>
       </div>`;
     this.wrap = root.querySelector('.wrap')!;
