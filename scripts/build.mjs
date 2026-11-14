@@ -34,10 +34,14 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/translate/fab.ts')], outfile: join(dist, 'translate-fab.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/translate/popup.ts')], outfile: join(dist, 'translate-popup.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/translate/options.ts')], outfile: join(dist, 'translate-options.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/page.ts')], outfile: join(dist, 'enhance-page.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/selection.ts')], outfile: join(dist, 'enhance-selection.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/options.ts')], outfile: join(dist, 'enhance-options.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/popup.ts')], outfile: join(dist, 'enhance-popup.js'), format: 'iife' }),
 ]);
 
 // 静态文件
-for (const f of ['popup/popup.html', 'popup/ui.css', 'options/options.html', 'translate/translate.html']) {
+for (const f of ['popup/popup.html', 'popup/ui.css', 'options/options.html', 'translate/translate.html', 'enhance/enhance.html']) {
   copyFileSync(join(root, 'src', f), join(dist, f.split('/').pop()));
 }
 const base = readFileSync(join(root, 'src/content/base.css'), 'utf8');

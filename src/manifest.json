@@ -13,7 +13,9 @@
   "permissions": ["storage", "unlimitedStorage", "scripting", "alarms", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
-    { "matches": ["http://*/*", "https://*/*"], "js": ["translate-fab.js"], "run_at": "document_idle", "all_frames": false }
+    { "matches": ["http://*/*", "https://*/*"], "js": ["translate-fab.js"], "run_at": "document_idle", "all_frames": false },
+    { "matches": ["http://*/*", "https://*/*"], "js": ["enhance-page.js"], "run_at": "document_start", "all_frames": false },
+    { "matches": ["http://*/*", "https://*/*"], "js": ["enhance-selection.js"], "run_at": "document_idle", "all_frames": false }
   ],
   "commands": {
     "toggle-site": {
