@@ -1,6 +1,6 @@
 {
   "name": "darkweb",
-  "version": "0.2.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Drak：通用自适应暗色模式浏览器插件（Chrome / Edge MV3）",
   "type": "module",
@@ -11,10 +11,11 @@
     "store:assets": "node scripts/build.mjs && node scripts/store-assets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "node scripts/build.mjs && node test/e2e/run.mjs && node test/e2e/translate.mjs",
+    "test:e2e": "node scripts/build.mjs && node test/e2e/run.mjs && node test/e2e/translate.mjs && node test/e2e/enhance.mjs",
     "check": "npm run typecheck && npm run test && npm run test:e2e"
   },
   "devDependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@types/chrome": "0.0.287",
     "esbuild": "0.24.2",
     "playwright": "1.63.0",

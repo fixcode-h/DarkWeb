@@ -5,6 +5,7 @@ import { classify, classifySvgText, computeStats, type ImageClass } from '../sha
 import type { AnalyzeResponse, FetchCssResponse, InvertResponse, Request } from '../shared/messages';
 import { fetchCssText, fetchWithLimit } from '../shared/css-fetch';
 import '../translate/background';
+import '../enhance/background';
 import {
   CACHE_PREFIX,
   DEFAULT_SETTINGS,

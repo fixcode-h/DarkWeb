@@ -38,4 +38,10 @@ export const BUILTIN_RULES: SiteRule[] = [
       '.login-scan-box img',
     ],
   },
+  {
+    match: ['*.baidu.com'],
+    mode: 'dynamic',
+    // 首页“百度热搜”标题是透明底深灰字 + 红色“搜”的 PNG，彩色部分让自动分类判成保留，深底上看不清（2026-11 线上核实）
+    invert: ['.hot-title-icon'],
+  },
 ];

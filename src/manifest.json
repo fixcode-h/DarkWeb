@@ -13,7 +13,10 @@
   "permissions": ["storage", "unlimitedStorage", "scripting", "alarms", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
-    { "matches": ["http://*/*", "https://*/*"], "js": ["translate-fab.js"], "run_at": "document_idle", "all_frames": false }
+    { "matches": ["http://*/*", "https://*/*"], "js": ["translate-fab.js"], "run_at": "document_idle", "all_frames": false },
+    { "matches": ["http://*/*", "https://*/*"], "js": ["enhance-page.js"], "run_at": "document_start", "all_frames": false },
+    { "matches": ["http://*/*", "https://*/*"], "js": ["enhance-selection.js", "enhance-input.js"], "run_at": "document_idle", "all_frames": false },
+    { "matches": ["https://www.youtube.com/*"], "js": ["enhance-subtitles.js"], "run_at": "document_idle", "all_frames": false }
   ],
   "commands": {
     "toggle-site": {
@@ -27,6 +30,12 @@
     "toggle-translate": {
       "suggested_key": { "default": "Alt+Shift+T" },
       "description": "翻译当前页面 / 显示原文"
+    },
+    "toggle-reader": {
+      "description": "打开 / 退出阅读模式"
+    },
+    "pick-element": {
+      "description": "屏蔽页面元素（点选隐藏）"
     }
   }
 }

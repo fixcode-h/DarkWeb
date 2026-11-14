@@ -22,3 +22,4 @@ node test/live/translate.mjs      # 用 Google 翻译真实页面，统计视口
 - 少数派的样式表 CDN 校验 Referer，后台直接拉取被 403，已改为失败时以页面身份重试。
 - Stack Overflow、npm、Medium、CSDN 等对无头浏览器返回 403 / 人机验证页，验不了。
 - 新浪、网易、百度、微博首页 DOMContentLoaded 本身要 5–10 秒（脚本多），首次上色晚是页面原因，期间有防闪白底色。
+- 百度首页（2026-11-14）：新版搜索框用 `background: linear-gradient(white, white) padding-box, transparent border-box` 画渐变描边，曾整块留白；输入框不设底色，曾显示成浏览器默认的 #3b3b3b 灰条，均已修。云端无头浏览器访问搜索结果页会被跳到验证码页，结果页只能本机验。

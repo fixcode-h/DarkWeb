@@ -5,6 +5,9 @@
 <title>知乎仿真页</title>
 <link rel="stylesheet" href="//static.zhimg.com:__PORT__/zhihu.css?delay=__CSSDELAY__">
 <style>
+  /* 渐变描边搜索框（仿百度首页）：多层背景省略了一层的颜色，输入框本身不设底色 */
+  #gbox { border: 1.5px solid transparent; border-radius: 12px; background: linear-gradient(white, white) padding-box, transparent border-box; padding: 8px; }
+  #gbox textarea { border: none; outline: none; resize: none; width: 90%; }
   /* 知乎原生夜间主题（仿真）：html[data-theme=dark] 下切换变量 */
   :root { --GBL01A: #ffffff; --GBK99A: #121212; --GBK06A: #8590a6; --page: #f6f6f6; }
   html[data-theme="dark"][data-native-supported] { --GBL01A: #121212; --GBK99A: #d3d3d3; --GBK06A: #8a8a8a; --page: #0b0b0b; }
@@ -36,6 +39,7 @@
   <div id="feed"></div>
 </main>
 <div class="Modal-backdrop" id="backdrop"></div>
+<div id="gbox"><textarea id="gta" rows="1" placeholder="搜索"></textarea></div>
 <script>
   // 模拟 CSS-in-JS：insertRule
   const s = document.createElement('style');
