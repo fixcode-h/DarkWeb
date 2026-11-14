@@ -11,7 +11,7 @@
     "store:assets": "node scripts/build.mjs && node scripts/store-assets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "node scripts/build.mjs && node test/e2e/run.mjs && node test/e2e/translate.mjs && node test/e2e/enhance.mjs",
+    "test:e2e": "node scripts/build.mjs && node test/e2e/run.mjs && node test/e2e/translate.mjs && node test/e2e/enhance.mjs && node test/e2e/update.mjs",
     "check": "npm run typecheck && npm run test && npm run test:e2e"
   },
   "devDependencies": {

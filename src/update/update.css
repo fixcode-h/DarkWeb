@@ -1,0 +1,30 @@
+/*
+ * “检查更新”的样式。单独一个文件，不和 ui.css 的整体改版互相冲突；
+ * 变量先取 Agent 面板风格的新名字（--card / --fg / --subtle / --accent-text），取不到再回退到旧名字。
+ */
+.upd-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.upd-version { font-weight: 500; font-variant-numeric: tabular-nums; }
+.upd-status { color: var(--fg, var(--text)) !important; margin: 12px 0 6px !important; font-weight: 500; }
+.upd-changes {
+  max-height: 320px; overflow: auto; margin-top: 6px; padding: 4px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-md, 7px); background: var(--field, var(--panel-2));
+}
+.upd-release { padding: 8px 0; }
+.upd-release + .upd-release { border-top: 1px solid var(--line); }
+.upd-tag { font-weight: 500; font-variant-numeric: tabular-nums; }
+.upd-changes ul { margin: 4px 0 0; padding-left: 18px; color: var(--fg, var(--text)); font-size: var(--text-footnote, 12px); line-height: 1.6; }
+.upd-changes ul ul { margin: 0; color: var(--subtle, var(--muted)); }
+.upd-steps { margin: 12px 0 0; padding-left: 20px; color: var(--muted); font-size: var(--text-footnote, 12px); line-height: 1.7; }
+
+/* 弹窗：页脚上方的版本行和顶部的提示条 */
+.upd-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 14px 0; padding-top: 8px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.upd-note {
+  font-size: var(--text-footnote, 12px); line-height: 1.5; color: var(--fg, var(--text));
+  background: var(--card, var(--panel)); border: 1px solid var(--line); border-radius: var(--r-xl, 10px);
+  padding: 8px 12px 8px 26px; position: relative;
+}
+.upd-note::before {
+  content: ''; position: absolute; left: 11px; top: 14px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent, #257de0);
+}
+.upd-note .link { font-weight: 500; }

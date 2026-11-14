@@ -44,6 +44,13 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/enhance/popup.ts')], outfile: join(dist, 'enhance-popup.js'), format: 'iife' }),
 ]);
 
+// 检查更新（src/update/）：弹窗入口和设置页卡片
+await Promise.all([
+  build({ ...common, entryPoints: [join(root, 'src/update/popup.ts')], outfile: join(dist, 'update-popup.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/update/options.ts')], outfile: join(dist, 'update-options.js'), format: 'iife' }),
+]);
+copyFileSync(join(root, 'src/update/update.css'), join(dist, 'update.css'));
+
 // 静态文件
 for (const f of ['popup/popup.html', 'popup/ui.css', 'options/options.html', 'translate/translate.html', 'enhance/enhance.html']) {
   copyFileSync(join(root, 'src', f), join(dist, f.split('/').pop()));
