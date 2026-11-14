@@ -162,6 +162,8 @@ async function main() {
           backdrop: t.lum(t.parse(getComputedStyle(q('#backdrop')).backgroundColor)),
           btn: t.parse(getComputedStyle(q('#ask')).backgroundColor),
           btnText: t.info(q('#ask')).contrast,
+          gbox: t.lum(t.parse(getComputedStyle(q('#gbox')).backgroundImage)),
+          gta: t.parse(getComputedStyle(q('#gta')).backgroundColor),
         };
       });
       check('知乎：页面背景为深色', r.body < 0.03, r.body.toFixed(4));
@@ -179,6 +181,8 @@ async function main() {
       check('知乎：ignore 区域（视频播放器）保持原样', r.video === 'rgb(255, 255, 255)' && r.videoColor === 'rgb(0, 0, 0)', `${r.video} / ${r.videoColor}`);
       check('知乎：半透明遮罩仍为深色', r.backdrop < 0.05, r.backdrop.toFixed(4));
       check('知乎：品牌蓝按钮保留色相、白字可读', r.btn.b > r.btn.r + 60 && r.btnText >= 3, `rgb(${r.btn.r},${r.btn.g},${r.btn.b}) / ${r.btnText.toFixed(2)}`);
+      check('搜索框：多层渐变背景（省略层）已转深', r.gbox < 0.03, r.gbox.toFixed(4));
+      check('搜索框：未设底色的输入框与页面底色一致（不是浏览器默认灰）', Math.abs(r.gta.r - r.pageBg.r) <= 12 && r.gta.r < 40, `rgb(${r.gta.r},${r.gta.g},${r.gta.b}) / page ${r.pageBg.r}`);
       check('知乎：插件无内部异常', d.errors === 0, String(d.errors));
       check('知乎：首次应用主线程耗时 ≤ 80ms', d.timings.startupMainThread <= 80, `${d.timings.startupMainThread}ms`);
       check('知乎：自检亮区占比 ≤ 3%', d.brightRatio !== null && d.brightRatio <= 0.03, String(d.brightRatio));
