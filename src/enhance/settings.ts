@@ -34,6 +34,10 @@ export interface EnhanceSettings {
   hideRules: Record<string, string[]>;
   /** 按站点追加的自定义 CSS */
   siteCss: Record<string, string>;
+  /** 输入框翻译：在输入框里连按三次空格，把已输入的内容译成 target */
+  input: { enabled: boolean; target: string };
+  /** 视频双语字幕（YouTube）：在原字幕下方显示译文，译成翻译设置里的目标语言 */
+  subtitles: { enabled: boolean };
 }
 
 export type ReaderTheme = 'auto' | 'dark' | 'light' | 'sepia';
@@ -56,6 +60,8 @@ export const DEFAULT_ENHANCE: EnhanceSettings = {
   reader: { fontSize: 18, width: 720, font: 'sans', theme: 'auto' },
   hideRules: {},
   siteCss: {},
+  input: { enabled: true, target: 'en' },
+  subtitles: { enabled: false },
 };
 
 export const READER_FONT_SIZES = [14, 16, 18, 20, 22, 24, 28] as const;
@@ -105,6 +111,11 @@ export function normalizeEnhance(raw: unknown): EnhanceSettings {
     reader: normalizeReader(r.reader),
     hideRules: normalizeHideRules(r.hideRules),
     siteCss: normalizeSiteCss(r.siteCss),
+    input: {
+      enabled: bool(obj(r.input).enabled, d.input.enabled),
+      target: typeof obj(r.input).target === 'string' && /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(obj(r.input).target as string) ? (obj(r.input).target as string) : d.input.target,
+    },
+    subtitles: { enabled: bool(obj(r.subtitles).enabled, d.subtitles.enabled) },
   };
 }
 

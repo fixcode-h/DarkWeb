@@ -83,3 +83,12 @@ describe('屏蔽规则与自定义 CSS', () => {
     expect(looksStable('123')).toBe(false);
   });
 });
+
+describe('输入框翻译与字幕设置', () => {
+  it('默认值与非法目标语言', () => {
+    expect(normalizeEnhance({}).input).toEqual({ enabled: true, target: 'en' });
+    expect(normalizeEnhance({ input: { target: 'ja' } }).input.target).toBe('ja');
+    expect(normalizeEnhance({ input: { target: '<x>' } }).input.target).toBe('en');
+    expect(normalizeEnhance({}).subtitles.enabled).toBe(false);
+  });
+});

@@ -1,5 +1,6 @@
 /** 阅读增强设置页 */
 import { siteKeyOf } from '../shared/settings';
+import { LANGS } from '../translate/lang';
 import { fontStack, loadEnhance, normalizeEnhance, parseSiteLines, saveEnhance, type EnhanceSettings, type FilterMode, type FontFamily, type SelectionTrigger } from './settings';
 
 const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
@@ -17,6 +18,10 @@ async function save(): Promise<void> {
 
 function render(): void {
   $('selEnabled').checked = s.selection.enabled;
+  $('inputEnabled').checked = s.input.enabled;
+  $<HTMLSelectElement>('inputTarget').value = s.input.target;
+  $<HTMLSelectElement>('inputTarget').disabled = !s.input.enabled;
+  $('subsEnabled').checked = s.subtitles.enabled;
   $<HTMLSelectElement>('selTrigger').value = s.selection.trigger;
   $<HTMLSelectElement>('selTrigger').disabled = !s.selection.enabled;
   $<HTMLSelectElement>('fontFamily').value = s.font.family;
@@ -88,6 +93,7 @@ function renderSites(): void {
 async function main(): Promise<void> {
   s = await loadEnhance();
   $<HTMLTextAreaElement>('sites').value = s.disabledSites.join('\n');
+  for (const [code, name] of LANGS) $<HTMLSelectElement>('inputTarget').add(new Option(name, code));
   render();
   renderSites();
   $('shortcuts').addEventListener('click', () => void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
@@ -106,6 +112,11 @@ async function main(): Promise<void> {
     const next = normalizeEnhance(changes.enhance.newValue);
     // 阅读模式里改的排版偏好不在这页显示，但要跟上，免得这页保存时写回旧值
     s.reader = next.reader;
+    // 播放器里的“译”按钮也会改双语字幕开关
+    if (next.subtitles.enabled !== s.subtitles.enabled) {
+      s.subtitles = next.subtitles;
+      render();
+    }
     if (JSON.stringify(next.hideRules) !== JSON.stringify(s.hideRules) && !document.activeElement?.closest('#siteList')) {
       s.hideRules = next.hideRules;
       s.siteCss = next.siteCss;
@@ -113,6 +124,9 @@ async function main(): Promise<void> {
     }
   });
   bind('selEnabled', 'change', (el) => (s.selection.enabled = el.checked));
+  bind('inputEnabled', 'change', (el) => (s.input.enabled = el.checked));
+  bind('inputTarget', 'change', (el) => (s.input.target = el.value));
+  bind('subsEnabled', 'change', (el) => (s.subtitles.enabled = el.checked));
   bind('selTrigger', 'change', (el) => (s.selection.trigger = el.value as SelectionTrigger));
   bind('fontFamily', 'change', (el) => (s.font.family = el.value as FontFamily));
   bind('fontCustom', 'change', (el) => (s.font.custom = el.value.replace(/[^\p{L}\p{N} ,"'_-]/gu, '')));
