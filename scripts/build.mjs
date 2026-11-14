@@ -37,6 +37,10 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/enhance/page.ts')], outfile: join(dist, 'enhance-page.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/enhance/selection.ts')], outfile: join(dist, 'enhance-selection.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/enhance/options.ts')], outfile: join(dist, 'enhance-options.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/input.ts')], outfile: join(dist, 'enhance-input.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/subtitles.ts')], outfile: join(dist, 'enhance-subtitles.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/reader.ts')], outfile: join(dist, 'enhance-reader.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/enhance/picker.ts')], outfile: join(dist, 'enhance-picker.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/enhance/popup.ts')], outfile: join(dist, 'enhance-popup.js'), format: 'iife' }),
 ]);
 
