@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIMITS, chunk, parseGoogle, parseLlm } from '../../src/translate/engines';
 import { engineLang, looksLikeIdentifier, looksLikeTarget, sameLang, worthTranslating } from '../../src/translate/lang';
+import { targetTop } from '../../src/translate/anchor';
 import { parseSites } from '../../src/translate/options';
 import { DEFAULT_TRANSLATE, normalizeTranslate, siteKeyOf } from '../../src/translate/settings';
 
@@ -95,5 +96,19 @@ describe('翻译：设置', () => {
       '192.168.1.10:8080',
       'localhost:3000',
     ]);
+  });
+});
+
+describe('翻译：保持阅读位置', () => {
+  it('锚点在阅读线下方或不按比例时，保持原来的顶部', () => {
+    expect(targetTop({ top: 300, height: 200, line: 225 }, 50, true)).toBe(300);
+    expect(targetTop({ top: -100, height: 400, line: 225 }, 50, false)).toBe(-100);
+  });
+  it('正在读的段落变短：按读到的比例换算，阅读线仍落在段落内', () => {
+    // 读到 80% 处，段落从 400 缩到 100：新顶部让阅读线仍在 80% 处
+    expect(targetTop({ top: -95, height: 400, line: 225 }, 100, true)).toBeCloseTo(225 - 80);
+  });
+  it('段落整个在阅读线上方时不换算', () => {
+    expect(targetTop({ top: -500, height: 200, line: 225 }, 50, true)).toBe(-500);
   });
 });
