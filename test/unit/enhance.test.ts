@@ -49,3 +49,37 @@ describe('划词翻译', () => {
     expect(escapeHtml('a < b & c')).toBe('a &lt; b &amp; c');
   });
 });
+
+import { safeSelector, siteRulesCss } from '../../src/enhance/settings';
+import { looksStable } from '../../src/enhance/selector';
+describe('屏蔽规则与自定义 CSS', () => {
+  it('选择器不能跳出规则', () => {
+    expect(safeSelector('div.ad')).toBe('div.ad');
+    expect(safeSelector('body { } * { display:none')).toBe('');
+    expect(safeSelector('a; @import url(x)')).toBe('');
+    expect(safeSelector('/* x */ div')).toBe('');
+  });
+  it('规则按站点和上级域名套用，坏规则丢弃', () => {
+    const s = normalizeEnhance({
+      hideRules: { 'example.com': ['#ad', 'x{}'], 'other.com': ['#o'] },
+      siteCss: { 'news.example.com': 'p{color:red}</style><script>' },
+    });
+    const css = siteRulesCss(s, 'news.example.com');
+    expect(css).toContain('#ad { display: none !important; }');
+    expect(css).not.toContain('x{}');
+    expect(css).not.toContain('#o');
+    expect(css).not.toMatch(/<\/style/i);
+    expect(siteRulesCss(s, 'example.org')).toBe('');
+  });
+  it('阅读偏好取最近的档位', () => {
+    expect(normalizeEnhance({ reader: { fontSize: 18.4, width: 9999, font: 'x', theme: 'sepia' } }).reader).toEqual({ fontSize: 18, width: 960, font: 'sans', theme: 'sepia' });
+  });
+  it('哈希类名不当作稳定选择器', () => {
+    expect(looksStable('ad-banner')).toBe(true);
+    expect(looksStable('sidebar')).toBe(true);
+    expect(looksStable('css-1x2y3z')).toBe(false);
+    expect(looksStable('_3kF9aQ')).toBe(false);
+    expect(looksStable('a1b2c3d4')).toBe(false);
+    expect(looksStable('123')).toBe(false);
+  });
+});

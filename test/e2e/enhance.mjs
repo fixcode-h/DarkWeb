@@ -24,6 +24,17 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
 <textarea id="ta">Editable text in a textarea</textarea>
 </body></html>`;
 
+const para = (i) => `<p>Paragraph ${i}: long-form reading benefits from a calm layout, steady line length and a typeface that does not tire the eyes. ${'Readers scan less and absorb more when the clutter around the text is gone. '.repeat(3)}</p>`;
+const ARTICLE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Calm reading</title></head><body>
+<nav id="nav"><a href="/">Home</a> <a href="/a">About</a></nav>
+<div class="ad-banner" id="ad">Buy now! Limited offer!</div>
+<aside id="side"><p>Related links and sidebar widgets</p></aside>
+<article><h1>Calm reading on the web</h1><p class="byline">By Jane Writer</p>
+${Array.from({ length: 8 }, (_, i) => para(i + 1)).join('')}
+<p>Inline <code>code sample</code> and an <a href="javascript:alert(1)" id="bad">evil link</a> plus <a href="/docs">docs</a>.</p>
+<img src="/x.png" onerror="window.__pwned = 1" alt="pic">
+</article><footer>Footer text</footer></body></html>`;
+
 let lastTo = '';
 function startServer() {
   return new Promise((done) => {
@@ -44,8 +55,12 @@ function startServer() {
         res.writeHead(204);
         return res.end();
       }
+      if (req.url === '/x.png') {
+        res.writeHead(404);
+        return res.end();
+      }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(PAGE);
+      res.end(req.url === '/article' ? ARTICLE : PAGE);
     });
     server.listen(0, '127.0.0.1', () => done({ server, port: server.address().port }));
   });
@@ -176,6 +191,78 @@ async function main() {
     await page.waitForTimeout(300);
     const excluded = await page.evaluate(() => ({ ov: !!document.querySelector('[data-drak-filter]'), font: getComputedStyle(document.getElementById('p1')).fontFamily }));
     check('排除网站：滤镜和字体都不生效', !excluded.ov && !/Courier New/.test(excluded.font), JSON.stringify(excluded));
+
+    // ---- 阅读模式 ----
+    await set('enhance', { disabledSites: [], filter: { mode: 'off', strength: 30 }, font: { family: '', custom: '', lineHeight: 0, bolder: false } });
+    const art = await ctx.newPage();
+    await art.goto(`${base}/article`);
+    await art.bringToFront();
+    const tool = (name) =>
+      sw.evaluate(async (n) => {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [n] });
+      }, name);
+    // 原页面自己的图片加载失败会触发一次 onerror，先清零
+    await art.waitForTimeout(200);
+    await art.evaluate(() => (window.__pwned = 0));
+    await tool('enhance-reader.js');
+    await art.waitForSelector('[data-drak-reader]', { state: 'attached' });
+    await art.waitForTimeout(300);
+    const rd = await art.evaluate(() => {
+      const r = document.querySelector('[data-drak-reader]').shadowRoot;
+      const c = r.querySelector('.content');
+      return {
+        title: r.querySelector('h1.title').textContent,
+        hasPara: c.textContent.includes('Paragraph 8'),
+        dupTitle: c.textContent.includes('Calm reading on the web'),
+        hasAd: c.textContent.includes('Buy now'),
+        hasNav: c.textContent.includes('About'),
+        badHref: c.querySelector('a[href^="javascript"]') !== null,
+        onerror: !!c.querySelector('[onerror]'),
+        docs: c.querySelector('a[href$="/docs"]')?.getAttribute('href'),
+        overflow: document.documentElement.style.overflow,
+      };
+    });
+    check('阅读模式：抽出标题和正文', rd.title === 'Calm reading on the web' && rd.hasPara, JSON.stringify(rd));
+    check('阅读模式：去掉广告和导航', !rd.hasAd && !rd.hasNav);
+    check('阅读模式：正文里不重复标题', !rd.dupTitle);
+    check('阅读模式：去掉 javascript: 链接和事件属性', !rd.badHref && !rd.onerror && !(await art.evaluate(() => window.__pwned)));
+    check('阅读模式：相对链接补成完整地址', rd.docs === `${base}/docs`, rd.docs);
+    check('阅读模式：背后页面不滚动', rd.overflow === 'hidden');
+    await art.evaluate(() => document.querySelector('[data-drak-reader]').shadowRoot.querySelector('[data-act="bigger"]').click());
+    await art.waitForTimeout(200);
+    const fs = await sw.evaluate(async () => (await chrome.storage.local.get('enhance')).enhance.reader.fontSize);
+    check('阅读模式：调字号并记住', fs === 20, String(fs));
+    await art.keyboard.press('Escape');
+    check('阅读模式：Esc 退出并恢复滚动', await art.evaluate(() => !document.querySelector('[data-drak-reader]') && document.documentElement.style.overflow === ''));
+    await tool('enhance-reader.js');
+    await art.waitForSelector('[data-drak-reader]', { state: 'attached' });
+    await tool('enhance-reader.js');
+    check('阅读模式：再触发一次关闭', await art.evaluate(() => !document.querySelector('[data-drak-reader]')));
+
+    // ---- 屏蔽页面元素 ----
+    await tool('enhance-picker.js');
+    await art.waitForSelector('[data-drak-picker]', { state: 'attached' });
+    const adBox = await art.locator('#ad').boundingBox();
+    await art.mouse.move(adBox.x + 5, adBox.y + 5);
+    await art.mouse.click(adBox.x + 5, adBox.y + 5);
+    check('屏蔽：点选时不触发页面点击', art.url().endsWith('/article'));
+    await art.keyboard.press('Enter');
+    await art.waitForFunction(() => getComputedStyle(document.getElementById('ad')).display === 'none');
+    const rules = await sw.evaluate(async () => (await chrome.storage.local.get('enhance')).enhance.hideRules);
+    const key = `127.0.0.1:${port}`;
+    check('屏蔽：元素立即隐藏并按站点保存', Array.isArray(rules[key]) && rules[key].length === 1, JSON.stringify(rules));
+    check('屏蔽：只隐藏选中的元素', await art.evaluate(() => getComputedStyle(document.getElementById('side')).display !== 'none'));
+    await art.keyboard.press('Escape');
+    check('屏蔽：Esc 退出点选', await art.evaluate(() => !document.querySelector('[data-drak-picker]')));
+    await art.reload();
+    await art.waitForTimeout(300);
+    check('屏蔽：刷新后仍然隐藏', await art.evaluate(() => getComputedStyle(document.getElementById('ad')).display === 'none'));
+    await set('enhance', { siteCss: { [key]: '#side { display: none !important; }' }, hideRules: { [key]: ['body { } * { display:none }', ...rules[key]] } });
+    await art.waitForFunction(() => getComputedStyle(document.getElementById('side')).display === 'none');
+    check('自定义 CSS：按站点生效', true);
+    check('屏蔽：坏选择器被丢弃，不会跳出规则', await art.evaluate(() => getComputedStyle(document.querySelector('article')).display !== 'none'));
+    await art.close();
 
     // ---- 设置页 ----
     const opt = await ctx.newPage();
