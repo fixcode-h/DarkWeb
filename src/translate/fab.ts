@@ -23,67 +23,71 @@ const SIZE = 36;
 const PEEK = 22;
 const DRAG_THRESHOLD = 5;
 
+// 配色、圆角、动效照 AgentPanel 的默认配色（Claude Code）：中性灰面板、蓝色强调、10px 浮层圆角、120ms snap 进场
 const CSS = `
 :host { all: initial; }
 .wrap {
-  --bg: rgba(32, 34, 38, .86); --bg-hover: rgba(44, 47, 53, .94); --line: rgba(255, 255, 255, .1);
-  --text: #eceef1; --muted: #a3a8b1; --accent: #f2c94c; --accent-2: #f5b83d; --accent-ink: #2a2206;
-  --shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 1px 3px rgba(0, 0, 0, .2);
+  --card: #1f1f1f; --pop: #303030; --fg: #ececec; --muted: #c6c6c6; --subtle: #9c9c9c;
+  --edge: rgb(255 255 255 / .1); --hover: rgb(255 255 255 / .07); --active: rgb(255 255 255 / .11);
+  --accent: #257de0; --accent-text: #6aabf1; --on-accent: #fff;
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / .32), 0 2px 6px rgb(0 0 0 / .2);
+  --ease-snap: cubic-bezier(.32, .72, 0, 1); --ease-spring: cubic-bezier(.34, 1.3, .64, 1);
   position: fixed; z-index: 2147483646; top: 0; right: 0; display: flex; flex-direction: row-reverse; align-items: center; gap: 8px;
-  transform: translateY(-50%); font: 12px/1.4 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  transform: translateY(-50%); font: 13px/1.4 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   -webkit-user-select: none; user-select: none; color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
   .wrap {
-    --bg: rgba(255, 255, 255, .9); --bg-hover: rgba(246, 247, 249, .98); --line: rgba(15, 20, 30, .1);
-    --text: #1d2026; --muted: #5d636e; --accent-2: #eaa625;
-    --shadow: 0 6px 20px rgba(15, 20, 30, .14), 0 1px 3px rgba(15, 20, 30, .1);
+    --card: #fff; --pop: #fff; --fg: #191919; --muted: #404040; --subtle: #666;
+    --edge: rgb(0 0 0 / .1); --hover: rgb(0 0 0 / .05); --active: rgb(0 0 0 / .09); --accent-text: #1757ac;
+    --shadow-pop: 0 8px 24px rgb(0 0 0 / .12), 0 2px 6px rgb(0 0 0 / .08);
     color-scheme: light;
   }
 }
 .btn {
-  position: relative; width: ${SIZE + 6}px; height: ${SIZE}px; border-radius: ${SIZE / 2}px 0 0 ${SIZE / 2}px; padding: 0 6px 0 0;
-  border: 1px solid var(--line); border-right: 0; background: var(--bg); color: var(--text);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4);
-  box-shadow: var(--shadow); cursor: pointer;
-  display: grid; place-items: center; font-weight: 600; font-size: 15px; touch-action: none;
-  transform: translateX(${SIZE + 6 - PEEK}px); opacity: .55;
-  transition: transform .26s cubic-bezier(.2, .8, .2, 1), opacity .2s, background .15s, color .15s, box-shadow .2s;
+  position: relative; box-sizing: border-box; width: ${SIZE + 6}px; height: ${SIZE}px; border-radius: ${SIZE / 2}px 0 0 ${SIZE / 2}px; padding: 0 6px 0 0;
+  border: 1px solid var(--edge); border-right: 0; background: var(--card); color: var(--muted);
+  box-shadow: var(--shadow-pop); cursor: pointer;
+  display: grid; place-items: center; font-weight: 600; font-size: 14px; touch-action: none;
+  transform: translateX(${SIZE + 6 - PEEK}px); opacity: .6;
+  transition: transform 200ms var(--ease-snap), opacity 120ms, background 60ms, color 60ms;
 }
-.label { transition: transform .2s; }
+.btn::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: transparent; transition: background 60ms; }
+.label { position: relative; transition: transform 200ms var(--ease-spring); }
 .open .btn, .on .btn, .dragging .btn { transform: none; opacity: 1; }
-.btn:hover { background: var(--bg-hover); color: var(--accent-2); }
-.btn:hover .label { transform: scale(1.08); }
-.btn:active .label { transform: scale(.92); }
-.dragging .btn { cursor: grabbing; box-shadow: 0 10px 28px rgba(0, 0, 0, .32); }
-.on .btn {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: var(--accent-ink);
-  box-shadow: 0 6px 18px rgba(242, 180, 60, .35), 0 1px 3px rgba(0, 0, 0, .2);
-}
+.btn:hover { color: var(--fg); }
+.btn:hover::before { background: var(--hover); }
+.btn:active::before { background: var(--active); }
+.btn:active .label { transform: scale(.9); transition-duration: 60ms; }
+.dragging .btn { cursor: grabbing; }
+.on .btn { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.on .btn:hover::before { background: rgb(255 255 255 / .1); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ring {
-  position: absolute; inset: 4px 10px 4px 4px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent);
-  opacity: 0; transition: opacity .2s; animation: spin .8s linear infinite;
+  position: absolute; inset: 5px 11px 5px 5px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent);
+  opacity: 0; transition: opacity 120ms; animation: spin .8s linear infinite;
 }
-.on .ring { border-top-color: var(--accent-ink); }
+.on .ring { border-top-color: var(--on-accent); }
 .busy .ring { opacity: 1; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .menu {
-  display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 10px;
-  background: var(--bg); border: 1px solid var(--line); box-shadow: var(--shadow);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4);
-  opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(8px) scale(.96); transform-origin: right center;
-  transition: opacity .16s, transform .2s cubic-bezier(.2, .8, .2, 1), visibility 0s .2s;
+  display: flex; flex-direction: column; padding: 4px; border-radius: 10px;
+  background: var(--pop); border: 1px solid var(--edge); box-shadow: var(--shadow-pop);
+  opacity: 0; visibility: hidden; pointer-events: none; transform: scale(.96); transform-origin: right center;
+  transition: opacity 60ms, transform 60ms, visibility 0s 60ms;
 }
-.open:not(.dragging) .menu { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition-delay: 0s; }
+.open:not(.dragging) .menu {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  transition: opacity 120ms var(--ease-snap), transform 120ms var(--ease-snap), visibility 0s;
+}
 .menu button {
-  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px 6px 8px; border-radius: 7px; white-space: nowrap; color: var(--muted); transition: background .12s, color .12s;
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 7px; white-space: nowrap; color: var(--fg); transition: background 60ms;
 }
-.menu svg { width: 14px; height: 14px; flex: none; opacity: .8; }
-.menu button:hover, .menu button:focus-visible { color: var(--text); background: var(--line); }
-.menu button:hover svg { opacity: 1; color: var(--accent-2); }
-@media (prefers-reduced-motion: reduce) { .btn, .menu, .label { transition: none; } }
+.menu svg { width: 14px; height: 14px; flex: none; color: var(--subtle); }
+.menu button:hover, .menu button:focus-visible { background: var(--hover); }
+.menu button:active { background: var(--active); }
+@media (prefers-reduced-motion: reduce) { .btn, .menu, .label, .open:not(.dragging) .menu { transition: none; } }
 @media print { .wrap { display: none; } }
 `;
 
