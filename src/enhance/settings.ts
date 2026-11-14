@@ -28,6 +28,22 @@ export interface EnhanceSettings {
   };
   /** 这些站点上不启用阅读增强（站点键：域名[:端口]） */
   disabledSites: string[];
+  /** 阅读模式的排版偏好 */
+  reader: ReaderPrefs;
+  /** 按站点隐藏的元素（CSS 选择器），由“屏蔽页面元素”点选生成，也可在设置页编辑 */
+  hideRules: Record<string, string[]>;
+  /** 按站点追加的自定义 CSS */
+  siteCss: Record<string, string>;
+}
+
+export type ReaderTheme = 'auto' | 'dark' | 'light' | 'sepia';
+export interface ReaderPrefs {
+  /** 正文字号 px */
+  fontSize: number;
+  /** 栏宽 px */
+  width: number;
+  font: 'sans' | 'serif';
+  theme: ReaderTheme;
 }
 
 export const ENHANCE_KEY = 'enhance';
@@ -37,7 +53,15 @@ export const DEFAULT_ENHANCE: EnhanceSettings = {
   font: { family: '', custom: '', lineHeight: 0, bolder: false },
   filter: { mode: 'off', strength: 30 },
   disabledSites: [],
+  reader: { fontSize: 18, width: 720, font: 'sans', theme: 'auto' },
+  hideRules: {},
+  siteCss: {},
 };
+
+export const READER_FONT_SIZES = [14, 16, 18, 20, 22, 24, 28] as const;
+export const READER_WIDTHS = [560, 640, 720, 840, 960] as const;
+const MAX_CSS = 20000;
+const MAX_RULES = 200;
 
 export const LINE_HEIGHTS = [0, 1.6, 1.8, 2] as const;
 
@@ -78,7 +102,76 @@ export function normalizeEnhance(raw: unknown): EnhanceSettings {
     disabledSites: Array.isArray(r.disabledSites)
       ? [...new Set(r.disabledSites.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim().toLowerCase()))]
       : [],
+    reader: normalizeReader(r.reader),
+    hideRules: normalizeHideRules(r.hideRules),
+    siteCss: normalizeSiteCss(r.siteCss),
   };
+}
+
+function nearest(v: unknown, list: readonly number[], d: number): number {
+  const n = Number(v);
+  if (!isFinite(n)) return d;
+  return list.reduce((a, b) => (Math.abs(b - n) < Math.abs(a - n) ? b : a));
+}
+
+function normalizeReader(raw: unknown): ReaderPrefs {
+  const r = obj(raw);
+  const d = DEFAULT_ENHANCE.reader;
+  return {
+    fontSize: nearest(r.fontSize, READER_FONT_SIZES, d.fontSize),
+    width: nearest(r.width, READER_WIDTHS, d.width),
+    font: pick(r.font, ['sans', 'serif'] as const, d.font),
+    theme: pick(r.theme, ['auto', 'dark', 'light', 'sepia'] as const, d.theme),
+  };
+}
+
+/**
+ * 选择器要能安全地拼进样式表：不能带花括号、分号、注释或 @ 规则，
+ * 否则一条坏规则就能跳出 { display: none } 改写整页。
+ */
+export function safeSelector(sel: unknown): string {
+  if (typeof sel !== 'string') return '';
+  const t = sel.trim();
+  if (!t || t.length > 500 || /[{};@]|\/\*|\*\/|<\//.test(t)) return '';
+  return t;
+}
+
+function normalizeHideRules(raw: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [site, list] of Object.entries(obj(raw))) {
+    if (!site || !Array.isArray(list)) continue;
+    const sels = [...new Set(list.map(safeSelector).filter(Boolean))].slice(0, MAX_RULES);
+    if (sels.length) out[site.toLowerCase()] = sels;
+  }
+  return out;
+}
+
+function normalizeSiteCss(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [site, css] of Object.entries(obj(raw))) {
+    if (!site || typeof css !== 'string' || !css.trim()) continue;
+    // 不让自定义 CSS 提前结束 <style>
+    out[site.toLowerCase()] = css.replace(/<\/style/gi, '').slice(0, MAX_CSS);
+  }
+  return out;
+}
+
+/** 当前站点适用的条目：站点键本身或它的上级域名 */
+export function forSite<T>(map: Record<string, T>, site: string): T[] {
+  return Object.keys(map)
+    .filter((k) => site === k || site.endsWith(`.${k}`))
+    .sort((a, b) => a.length - b.length)
+    .map((k) => map[k]);
+}
+
+/** 屏蔽规则 + 自定义 CSS 合成的样式表 */
+export function siteRulesCss(s: EnhanceSettings, site: string): string {
+  const sels = forSite(s.hideRules, site).flat();
+  const parts: string[] = [];
+  // 每条选择器单独一条规则：浏览器不认识的一条不会连累其他条
+  for (const sel of sels) parts.push(`${sel} { display: none !important; }`);
+  parts.push(...forSite(s.siteCss, site));
+  return parts.join('\n');
 }
 
 export async function loadEnhance(): Promise<EnhanceSettings> {

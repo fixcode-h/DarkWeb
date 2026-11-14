@@ -59,6 +59,16 @@
     .preview p { margin: 0 0 6px; } .preview p:last-child { margin: 0; }
     kbd { font: 11px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 4px; color: var(--muted); }
     .hidden { display: none !important; }
+    .btn { font: inherit; cursor: pointer; color: var(--fg); background: var(--pop); border: 1px solid var(--edge); border-radius: 7px; padding: 6px 12px; transition: background 60ms; }
+    .btn:hover { background: color-mix(in srgb, var(--pop), var(--fg) 7%); }
+    .btn:active { background: color-mix(in srgb, var(--pop), var(--fg) 11%); }
+    .btn.danger { color: #e5484d; }
+    .site { padding: 12px 16px; border-top: 1px solid var(--edge); display: grid; gap: 8px; }
+    .site:first-child { border-top: 0; }
+    .site-head { display: flex; align-items: center; gap: 8px; }
+    .site-head b { flex: 1; font-weight: 600; }
+    .site label { display: grid; gap: 4px; color: var(--subtle); font-size: 12px; }
+    .empty-sites { padding: 12px 16px; color: var(--subtle); }
     @media (max-width: 560px) { .row { flex-wrap: wrap; } select, input[type="text"] { width: 100%; } }
   </style>
 </head>
@@ -141,6 +151,30 @@
         <input type="range" id="strength" min="5" max="80" step="5" />
         <span class="val" id="strengthVal"></span>
       </label>
+    </section>
+
+    <section>
+      <h2>阅读模式与元素屏蔽</h2>
+      <div class="row">
+        <span class="text">阅读模式<small>抽出正文重新排版，可调字号、栏宽、黑体 / 宋体、深色 / 浅色 / 米黄。页面上右键“阅读模式”打开，Esc 退出。</small></span>
+      </div>
+      <div class="row">
+        <span class="text">屏蔽页面元素<small>页面上右键“屏蔽页面元素…”，点选广告、浮窗、登录提示等，确认后本站以后都会隐藏。可以在下面按网站修改或删除。</small></span>
+      </div>
+      <div class="row">
+        <span class="text">快捷键<small>两者默认没有快捷键，可以在浏览器的扩展快捷键页面自己设置。</small></span>
+        <button type="button" class="btn" id="shortcuts">设置快捷键</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>按网站的屏蔽规则与自定义 CSS</h2>
+      <div id="siteList"></div>
+      <div class="row">
+        <input type="text" id="newSite" placeholder="添加网站，例如 example.com" />
+        <button type="button" class="btn" id="addSite">添加</button>
+        <span class="text"></span>
+      </div>
     </section>
 
     <section>
