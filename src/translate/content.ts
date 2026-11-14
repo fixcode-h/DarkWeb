@@ -5,6 +5,7 @@
  * 整段连同行内标签一起交给引擎，译文再按标签还原，这样语序可以自由调整而链接、加粗不丢。
  * 只翻译视口附近的段落，滚动到哪里翻到哪里；页面后续新增的内容自动跟进。
  */
+import { capture, restore } from './anchor';
 import { looksLikeIdentifier, looksLikeTarget, sameLang, worthTranslating } from './lang';
 import {
   ENGINE_NAMES,
@@ -177,7 +178,11 @@ class PageTranslator {
     this.mo = this.io = null;
     clearTimeout(this.flushTimer);
     clearTimeout(this.dirtyTimer);
-    for (const run of this.runs) this.revert(run);
+    if (this.runs.size) {
+      this.keepPosition(() => {
+        for (const run of this.runs) this.revert(run);
+      }, this.settings.mode);
+    }
     this.runs.clear();
     this.byParent.clear();
     this.nodeRun = new WeakMap();
@@ -405,6 +410,8 @@ class PageTranslator {
         this.noted = true;
         toast(`${res.note}。已自动改用${ENGINE_NAMES[res.engine]}。`);
       }
+      // 先把要写进页面的译文都准备好，再在一次“记位置 → 改 DOM → 补滚动”里写进去
+      const ready: [Run, string][] = [];
       batch.forEach((run, i) => {
         if (!this.runs.has(run)) return;
         const item = res.items![i];
@@ -413,17 +420,55 @@ class PageTranslator {
           run.state = 'skipped';
           return;
         }
-        try {
-          this.apply(run, item.text);
-          run.state = 'done';
-        } catch {
-          run.state = 'skipped';
-        }
+        ready.push([run, item.text]);
       });
+      if (ready.length) {
+        this.keepPosition(() => {
+          for (const [run, html] of ready) {
+            try {
+              this.apply(run, html);
+              run.state = 'done';
+            } catch {
+              run.state = 'skipped';
+            }
+          }
+        }, this.settings.mode);
+      }
       // 自己造成的 DOM 变化不需要再处理
       this.mo?.takeRecords();
     }
     this.flush();
+  }
+
+  // ---- 阅读位置 ----
+
+  /**
+   * 改 DOM 时保持阅读位置：译文变短、变长都不让正在看的内容被挤走。
+   * 仅显示译文模式下段落本身会变长短，阅读线落在段落中间时按比例换算位置。
+   */
+  private keepPosition(fn: () => void, mode: TranslateSettings['mode']): void {
+    let anchor = null;
+    try {
+      anchor = capture((hit) => this.stableElement(hit));
+    } catch {
+      /* 取不到锚点就只靠浏览器自带的滚动锚定 */
+    }
+    fn();
+    try {
+      restore(anchor, mode === 'replace');
+    } catch {
+      /* 同上 */
+    }
+  }
+
+  /** 把点中的节点换成改动后仍在页面上的元素：跳出我们插入的译文，跳出可能被替换掉的原文段 */
+  private stableElement(hit: Element): Element | null {
+    let n: Node | null = hit;
+    for (let p: Node | null = hit; p; p = p.parentNode) if (this.ours.has(p)) n = p.parentNode;
+    const run = this.runOf(n);
+    if (run) return run.anchor;
+    if (n instanceof ShadowRoot) return n.host;
+    return n instanceof Element ? n : null;
   }
 
   // ---- 渲染 ----

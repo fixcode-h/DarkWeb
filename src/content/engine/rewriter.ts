@@ -2,7 +2,7 @@
  * 样式表级改写：遍历 CSSOM，为每条含颜色的规则生成同选择器、只含颜色属性的覆盖规则。
  * 覆盖规则放进紧跟在页面样式之后的可构造样式表里，优先级和层叠顺序与原页面一致。
  */
-import { channelVarCandidates, channelVarName, rewriteValue, roleOfProperty, shadowVarName, stripUrl } from './css-value';
+import { channelVarCandidates, channelVarName, rewriteValue, roleOfProperty, shadowVarName, splitTopLevel, stripUrl } from './css-value';
 import type { ColorTransformer, Role } from './transform';
 
 const ROLES: Role[] = ['bg', 'fg', 'border', 'shadow'];
@@ -80,6 +80,14 @@ function roleOf(prop: string): Role | null {
 }
 
 type ValueResult = ReturnType<typeof rewriteValue>;
+
+/** 列表值里单独的 `initial` 层换成 `none`（只有一层时 `initial` 本身合法，保持不动） */
+export function fixInitialLayers(text: string): string {
+  if (!/\binitial\b/i.test(text)) return text;
+  const layers = splitTopLevel(text);
+  if (layers.length < 2) return text;
+  return layers.map((l) => (l.trim().toLowerCase() === 'initial' ? ' none' : l)).join(',').trim();
+}
 
 export class SheetRewriter {
   private ruleCache = new WeakMap<CSSRule, string>();
@@ -264,6 +272,9 @@ export class SheetRewriter {
       const important = style.getPropertyPriority(target) === 'important';
       const r = this.value(value, role, opts.base);
       this.useVars(r.vars, role);
+      // 多层背景里省略的层，CSSOM 读出来是 `linear-gradient(...), initial`；原样写回整条声明无效会被丢掉
+      // （百度首页搜索框 `background: linear-gradient(white, white) padding-box, transparent border-box` 因此留白）
+      if (target === 'background-image') r.text = fixInitialLayers(r.text);
       if (target === 'background-image' && r.urls.length === 1 && r.hits === 0 && onBgUrl) {
         try {
           onBgUrl(new URL(stripUrl(r.urls[0]), opts.base || location.href).href, important);

@@ -37,8 +37,16 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
 </script>
 </body></html>`;
 
+/** 阅读位置用的长页面：每段都很长，假引擎把它们译成很短的一句 */
+const LONG_TEXT = 'LONGTEXT ' + 'The quick brown fox jumps over the lazy dog and keeps running across the field. '.repeat(30);
+const longPage = (noAnchor) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Long</title>
+<style>body{font:16px/1.6 sans-serif;max-width:720px;margin:20px auto}${noAnchor ? 'html,body{overflow-anchor:none}' : ''}</style></head><body>
+${Array.from({ length: 40 }, (_, i) => `<p id="L${i}">${LONG_TEXT}</p>`).join('\n')}
+</body></html>`;
+
 /** 假引擎：保留标签，把每段文字包成【译:…】，并把第一个标签挪到最前面，模拟语序变化 */
 function fakeTranslate(html) {
+  if (html.startsWith('LONGTEXT')) return '短译文。';
   const m = /<a i="(\d+)">(.*?)<\/a>/.exec(html);
   if (m && !m[2].includes('<')) html = m[0] + html.replace(m[0], '');
   return html.replace(/(^|>)([^<]+)/g, (_, pre, text) => (/[a-z]/i.test(text) ? `${pre}【译:${text.trim()}】` : pre + text));
@@ -64,7 +72,7 @@ function startServer() {
         return res.end();
       }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(PAGE);
+      res.end(req.url.startsWith('/long') ? longPage(req.url.includes('noanchor')) : PAGE);
     });
     server.listen(0, '127.0.0.1', () => done({ server, port: server.address().port }));
   });
@@ -241,6 +249,42 @@ async function main() {
     await setTr({ fab: { ...fab2, hiddenSites: [], enabled: false } });
     await page.waitForFunction(() => !document.querySelector('html > div[translate="no"][style*="2147483646"]'));
     check('侧边按钮：全局关闭', true);
+    await setTr({ fab: { ...fab2, hiddenSites: [], enabled: true, side: 'right', y: 0.62 } });
+
+    // ---- 阅读位置：译文长短变化不挤走正在看的内容 ----
+    // 阅读线在视口 25% 高度处；L20 是正在读的长段落，顶部在视口上方
+    const LINE = Math.round(900 * 0.25);
+    const where = () =>
+      page.evaluate((line) => {
+        const r = document.getElementById('L20').getBoundingClientRect();
+        return { top: Math.round(r.top), frac: (line - r.top) / r.height };
+      }, LINE);
+    const readAt = async (path, mode, scrollTop, done) => {
+      await setTr({ mode, fab: { ...fab2, hiddenSites: [], enabled: false } });
+      await page.goto(`${base}${path}`);
+      await page.bringToFront();
+      await page.evaluate((y) => window.scrollTo(0, document.getElementById('L20').offsetTop + y), scrollTop);
+      await page.waitForTimeout(100);
+      const before = await where();
+      await command('tr:start');
+      await page.waitForFunction(done, null, { timeout: 8000 });
+      await page.waitForTimeout(800);
+      return { before, after: await where() };
+    };
+    // 仅显示译文：上方和正在读的段落都缩成一句，按“读到这段的百分之几”保住位置
+    const shrink = await readAt('/long', 'replace', 375, () => document.getElementById('L20').textContent.startsWith('短译文') && document.getElementById('L18').textContent.startsWith('短译文'));
+    check(
+      '阅读位置：译文变短时仍停在正在读的段落',
+      shrink.after.frac > 0 && shrink.after.frac < 1 && Math.abs(shrink.after.frac - shrink.before.frac) < 0.1,
+      JSON.stringify(shrink),
+    );
+    await command('tr:stop');
+    // 页面关掉了浏览器自带的滚动锚定：双语模式上方段落变高，正在读的段落不能被推走
+    const grow = await readAt('/long?noanchor', 'bilingual', 100, () => !!document.querySelector('#L19 > font.drak-tr') && !!document.querySelector('#L20 > font.drak-tr'));
+    check('阅读位置：页面关掉滚动锚定时，上方变高也不被推走', Math.abs(grow.after.top - grow.before.top) <= 2, JSON.stringify(grow));
+    await command('tr:stop');
+    const back = await where();
+    check('阅读位置：显示原文时也不跳', Math.abs(back.top - grow.before.top) <= 2, JSON.stringify({ before: grow.before, back }));
     await setTr({ fab: { ...fab2, hiddenSites: [], enabled: true, side: 'right', y: 0.62 } });
 
     // ---- 引擎不可用 ----

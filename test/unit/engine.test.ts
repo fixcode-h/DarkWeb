@@ -265,3 +265,16 @@ describe('theme presets', () => {
     expect(vivid).toBeGreaterThan(base);
   });
 });
+
+describe('multi-layer background-image', () => {
+  it('replaces omitted layers serialized as initial', async () => {
+    const { fixInitialLayers } = await import('../../src/content/engine/rewriter');
+    // 百度搜索框：background: linear-gradient(white, white) padding-box, transparent border-box
+    expect(fixInitialLayers('linear-gradient(rgb(20, 22, 26), rgb(20, 22, 26)), initial')).toBe(
+      'linear-gradient(rgb(20, 22, 26), rgb(20, 22, 26)), none',
+    );
+    expect(fixInitialLayers('initial, url("a.png")')).toBe('none, url("a.png")');
+    expect(fixInitialLayers('initial')).toBe('initial');
+    expect(fixInitialLayers('linear-gradient(red, blue)')).toBe('linear-gradient(red, blue)');
+  });
+});
