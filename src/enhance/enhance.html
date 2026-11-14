@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Drak 阅读增强</title>
+  <style>
+    /* 配色、圆角、动效照 AgentPanel 的默认配色：中性灰面板、蓝色强调、10px 卡片圆角、60–120ms 过渡 */
+    :root {
+      --bg: #171717; --card: #1f1f1f; --pop: #262626; --fg: #ececec; --muted: #c6c6c6; --subtle: #9c9c9c;
+      --edge: rgb(255 255 255 / .1); --hover: rgb(255 255 255 / .07); --active: rgb(255 255 255 / .11);
+      --accent: #257de0; --accent-text: #6aabf1; --on-accent: #fff; --ok: #5bb974;
+      --ease-snap: cubic-bezier(.32, .72, 0, 1);
+      color-scheme: dark;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7f7f7; --card: #fff; --pop: #fff; --fg: #191919; --muted: #404040; --subtle: #666;
+        --edge: rgb(0 0 0 / .1); --hover: rgb(0 0 0 / .05); --active: rgb(0 0 0 / .09); --accent-text: #1757ac; --ok: #2e8b4a;
+        color-scheme: light;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    header img { border-radius: 10px; }
+    h1 { font-size: 18px; font-weight: 600; margin: 0; }
+    header p { margin: 2px 0 0; color: var(--subtle); }
+    #saved { margin-left: auto; color: var(--ok); font-size: 12px; opacity: 0; transition: opacity 120ms var(--ease-snap); }
+    #saved.show { opacity: 1; }
+    section { background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: 4px 0; margin-bottom: 12px; }
+    h2 { font-size: 12px; font-weight: 600; color: var(--subtle); margin: 0; padding: 10px 16px 6px; letter-spacing: .02em; }
+    .row { display: flex; align-items: center; gap: 16px; min-height: 44px; padding: 8px 16px; border-top: 1px solid var(--edge); }
+    h2 + .row { border-top: 0; }
+    .row > .text { flex: 1; min-width: 0; }
+    .row small { display: block; color: var(--subtle); font-size: 12px; }
+    select, input[type="text"], textarea {
+      font: inherit; color: var(--fg); background: var(--pop); border: 1px solid var(--edge); border-radius: 7px;
+      padding: 6px 10px; outline: none; transition: border-color 60ms;
+    }
+    select { min-width: 180px; cursor: pointer; }
+    select:hover, input[type="text"]:hover, textarea:hover { border-color: color-mix(in srgb, var(--edge), var(--fg) 15%); }
+    select:focus-visible, input:focus-visible, textarea:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+    input[type="text"] { width: 260px; }
+    textarea { width: 100%; min-height: 84px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    input[type="range"] { width: 180px; accent-color: var(--accent); }
+    .val { width: 36px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+    /* 开关 */
+    .switch { position: relative; flex: none; width: 34px; height: 20px; }
+    .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+    .switch span { position: absolute; inset: 0; border-radius: 10px; background: var(--active); transition: background 120ms var(--ease-snap); pointer-events: none; }
+    .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); transition: transform 120ms var(--ease-snap); }
+    .switch input:checked + span { background: var(--accent); }
+    .switch input:checked + span::after { transform: translateX(14px); }
+    .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .stack { flex-direction: column; align-items: stretch; gap: 8px; }
+    .preview { margin: 0; padding: 12px 14px; border-radius: 7px; background: var(--pop); border: 1px solid var(--edge); color: var(--muted); font-size: 14px; }
+    .preview p { margin: 0 0 6px; } .preview p:last-child { margin: 0; }
+    kbd { font: 11px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 4px; color: var(--muted); }
+    .hidden { display: none !important; }
+    @media (max-width: 560px) { .row { flex-wrap: wrap; } select, input[type="text"] { width: 100%; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="icons/icon-48.png" alt="" width="40" height="40" />
+      <div>
+        <h1>阅读增强</h1>
+        <p>划词翻译、字体与排版、护眼滤镜。改动自动保存，已打开的页面立即生效。</p>
+      </div>
+      <span id="saved">已保存</span>
+    </header>
+
+    <section>
+      <h2>划词翻译</h2>
+      <label class="row">
+        <span class="text">选中文字时显示翻译<small>引擎和目标语言跟随“翻译设置”；选中的已是目标语言时译成英文。也可以右键“翻译选中的文字”。</small></span>
+        <span class="switch"><input type="checkbox" id="selEnabled" /><span></span></span>
+      </label>
+      <label class="row">
+        <span class="text">触发方式</span>
+        <select id="selTrigger">
+          <option value="icon">先显示“译”图标，点了再翻译</option>
+          <option value="auto">松开鼠标立即翻译</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <h2>字体与排版</h2>
+      <label class="row">
+        <span class="text">网页字体<small>代码、公式、图标不受影响</small></span>
+        <select id="fontFamily">
+          <option value="">不修改</option>
+          <option value="sans">黑体（苹方 / 微软雅黑 / 思源黑体）</option>
+          <option value="serif">宋体（宋体 / 思源宋体）</option>
+          <option value="kai">楷体（霞鹜文楷 / 楷体）</option>
+          <option value="custom">自定义…</option>
+        </select>
+      </label>
+      <label class="row hidden" id="customRow">
+        <span class="text">自定义字体名<small>本机已安装的字体，多个用逗号分隔</small></span>
+        <input type="text" id="fontCustom" placeholder="例如：LXGW WenKai, Inter" />
+      </label>
+      <label class="row">
+        <span class="text">段落行高</span>
+        <select id="lineHeight">
+          <option value="0">不修改</option>
+          <option value="1.6">1.6（紧凑）</option>
+          <option value="1.8">1.8（舒适）</option>
+          <option value="2">2.0（宽松）</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="text">文字稍微加粗<small>细字体在暗色背景下更清楚</small></span>
+        <span class="switch"><input type="checkbox" id="bolder" /><span></span></span>
+      </label>
+      <div class="row stack">
+        <div class="preview" id="preview">
+          <p>预览：深夜读长文时，字体和行距比颜色更影响疲劳感。</p>
+          <p>The quick brown fox jumps over the lazy dog. 1234567890</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>护眼滤镜</h2>
+      <label class="row">
+        <span class="text">滤镜<small>在整个页面上叠一层，和暗色模式可以同时用</small></span>
+        <select id="filterMode">
+          <option value="off">关闭</option>
+          <option value="warm">暖色（减少蓝光）</option>
+          <option value="dim">调暗</option>
+          <option value="gray">灰度</option>
+        </select>
+      </label>
+      <label class="row" id="strengthRow">
+        <span class="text">强度</span>
+        <input type="range" id="strength" min="5" max="80" step="5" />
+        <span class="val" id="strengthVal"></span>
+      </label>
+    </section>
+
+    <section>
+      <h2>不启用阅读增强的网站</h2>
+      <div class="row stack">
+        <span class="text"><small>一行一个域名或 IP:端口，含子域名，例如 <kbd>example.com</kbd>、<kbd>192.168.1.10:8080</kbd>。</small></span>
+        <textarea id="sites" spellcheck="false"></textarea>
+      </div>
+    </section>
+  </main>
+  <script src="enhance-options.js"></script>
+</body>
+</html>
