@@ -1,27 +1,36 @@
 /**
  * 阅读增强：字体与排版、护眼滤镜（静态内容脚本，document_start，只在顶层页面运行）。
- * 两者都只往 <html> 下挂一个节点，不碰页面自己的内容树；设置一改立即生效，不用刷新。
+ * 另外套用按站点保存的屏蔽规则和自定义 CSS（不受“不启用阅读增强的网站”影响，它们本来就是按站点设的）。
+ * 都只往 <html> 下挂节点，不碰页面自己的内容树；设置一改立即生效，不用刷新。
  */
 import { siteKeyOf } from '../shared/settings';
-import { ENHANCE_KEY, enhanceActiveOn, filterStyle, fontCss, loadEnhance, normalizeEnhance, type EnhanceSettings } from './settings';
+import { ENHANCE_KEY, enhanceActiveOn, filterStyle, fontCss, loadEnhance, normalizeEnhance, siteRulesCss, type EnhanceSettings } from './settings';
 
 const STYLE_ID = 'drak-enhance-font';
 const site = siteKeyOf(location.host);
 let style: HTMLStyleElement | null = null;
+let rules: HTMLStyleElement | null = null;
+
+/** 把样式挂到 <html> 最后，和页面里同为 !important 的规则比时靠后者胜 */
+function putStyle(el: HTMLStyleElement | null, css: string, id: string): HTMLStyleElement | null {
+  if (!css) {
+    el?.remove();
+    return el;
+  }
+  if (!el) {
+    el = document.createElement('style');
+    el.id = id;
+  }
+  if (el.textContent !== css) el.textContent = css;
+  if (el.parentNode !== document.documentElement || (el.nextSibling && el.nextSibling.nodeName === 'BODY')) document.documentElement.appendChild(el);
+  return el;
+}
 let overlay: HTMLElement | null = null;
 
 function apply(s: EnhanceSettings): void {
   const on = enhanceActiveOn(s, site);
-  const css = on ? fontCss(s.font) : '';
-  if (css) {
-    if (!style) {
-      style = document.createElement('style');
-      style.id = STYLE_ID;
-    }
-    if (style.textContent !== css) style.textContent = css;
-    // 放在最后，和页面里同为 !important 的规则比时靠后者胜
-    if (style.parentNode !== document.documentElement || style.nextSibling) document.documentElement.appendChild(style);
-  } else style?.remove();
+  style = putStyle(style, on ? fontCss(s.font) : '', STYLE_ID);
+  rules = putStyle(rules, site ? siteRulesCss(s, site) : '', 'drak-enhance-rules');
 
   const fs = on ? filterStyle(s.filter) : '';
   if (fs) {

@@ -29,6 +29,12 @@
     "toggle-translate": {
       "suggested_key": { "default": "Alt+Shift+T" },
       "description": "翻译当前页面 / 显示原文"
+    },
+    "toggle-reader": {
+      "description": "打开 / 退出阅读模式"
+    },
+    "pick-element": {
+      "description": "屏蔽页面元素（点选隐藏）"
     }
   }
 }
