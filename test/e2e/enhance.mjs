@@ -22,6 +22,7 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
 <pre id="code">const keep = "monospace";</pre>
 <i id="ico" class="icon-star"></i>
 <textarea id="ta">Editable text in a textarea</textarea>
+<input id="in" type="text"><input id="pw" type="password"><div id="ce" contenteditable="true"></div>
 </body></html>`;
 
 const para = (i) => `<p>Paragraph ${i}: long-form reading benefits from a calm layout, steady line length and a typeface that does not tire the eyes. ${'Readers scan less and absorb more when the clutter around the text is gone. '.repeat(3)}</p>`;
@@ -157,6 +158,33 @@ async function main() {
     await selectText(page, 'p1');
     check('划词：关闭后不再出现', !(await shadow(page, '.icon')) && !(await shadow(page, '.card')));
 
+    // ---- 输入框翻译 ----
+    const typeAndTriple = async (sel, text) => {
+      await page.click(sel);
+      await page.keyboard.type(text);
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Space');
+    };
+    await typeAndTriple('#in', '你好世界');
+    await page.waitForFunction(() => document.getElementById('in').value.startsWith('【译'));
+    check('输入框：连按三次空格替换成译文', (await page.inputValue('#in')) === '【译:你好世界】', await page.inputValue('#in'));
+    check('输入框：译成设置里的语言（默认英文）', /English|^en$/.test(lastTo), lastTo);
+    await page.keyboard.press('Control+z');
+    const undone = await page.inputValue('#in');
+    check('输入框：Ctrl+Z 撤销回原文', undone.startsWith('你好世界'), undone);
+    await typeAndTriple('#ce', '早上好');
+    await page.waitForFunction(() => document.getElementById('ce').innerText.startsWith('【译'));
+    check('输入框：可编辑区域也能翻译', (await page.evaluate(() => document.getElementById('ce').innerText.trim())) === '【译:早上好】');
+    await typeAndTriple('#pw', 'secret');
+    await page.waitForTimeout(400);
+    check('输入框：密码框不处理', (await page.inputValue('#pw')).startsWith('secret'));
+    await page.fill('#in', '');
+    await page.click('#in');
+    await page.keyboard.type('a b c');
+    await page.waitForTimeout(400);
+    check('输入框：正常打字的空格不触发', (await page.inputValue('#in')) === 'a b c');
+
     // ---- 字体与排版 ----
     const fontOf = (id) => page.evaluate((i) => getComputedStyle(document.getElementById(i)).fontFamily, id);
     await set('enhance', { font: { family: 'custom', custom: 'Courier New', lineHeight: 2, bolder: false } });
@@ -263,6 +291,34 @@ async function main() {
     check('自定义 CSS：按站点生效', true);
     check('屏蔽：坏选择器被丢弃，不会跳出规则', await art.evaluate(() => getComputedStyle(document.querySelector('article')).display !== 'none'));
     await art.close();
+
+    // ---- YouTube 双语字幕（本地仿真播放器 DOM）----
+    const YT = `<!doctype html><html><head><meta charset="utf-8"></head><body>
+<div id="movie_player" style="position:relative;width:800px;height:450px;background:#000">
+<div class="ytp-caption-window-container"><div class="caption-window" style="position:absolute;bottom:20px;left:0;right:0;text-align:center">
+<span class="captions-text"><span class="caption-visual-line"><span class="ytp-caption-segment" style="font-size:24px;color:#fff;background:rgba(8,8,8,.75)">Hello there</span></span></span></div></div>
+<div class="ytp-chrome-bottom"><div class="ytp-right-controls"><button class="ytp-subtitles-button ytp-button" aria-pressed="false" onclick="this.setAttribute('aria-pressed','true')">CC</button></div></div>
+</div></body></html>`;
+    await ctx.route('https://www.youtube.com/**', (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: YT }));
+    const yt = await ctx.newPage();
+    await yt.goto('https://www.youtube.com/watch?v=test');
+    await yt.bringToFront();
+    await yt.waitForSelector('#movie_player .drak-sub-btn');
+    check('字幕：播放器里出现“译”按钮，默认关闭', (await yt.getAttribute('.drak-sub-btn', 'aria-pressed')) === 'false');
+    await yt.waitForTimeout(400);
+    check('字幕：关闭时不显示译文', !(await yt.$('.drak-sub')));
+    await yt.click('.drak-sub-btn');
+    await yt.waitForSelector('.captions-text > .drak-sub');
+    check('字幕：打开后原字幕下方出现译文', (await yt.textContent('.drak-sub')) === '【译:Hello there】', await yt.textContent('.drak-sub'));
+    check('字幕：顺手打开播放器字幕', (await yt.getAttribute('.ytp-subtitles-button', 'aria-pressed')) === 'true');
+    check('字幕：开关记在设置里', await sw.evaluate(async () => (await chrome.storage.local.get('enhance')).enhance.subtitles.enabled === true));
+    await yt.evaluate(() => (document.querySelector('.ytp-caption-segment').textContent = 'Next line of speech'));
+    await yt.waitForFunction(() => document.querySelector('.drak-sub')?.textContent === '【译:Next line of speech】');
+    check('字幕：字幕变化后译文跟着更新', true);
+    await yt.click('.drak-sub-btn');
+    await yt.waitForSelector('.drak-sub', { state: 'detached' });
+    check('字幕：再点一次关闭', true);
+    await yt.close();
 
     // ---- 设置页 ----
     const opt = await ctx.newPage();
