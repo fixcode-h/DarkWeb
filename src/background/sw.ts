@@ -6,6 +6,7 @@ import type { AnalyzeResponse, FetchCssResponse, InvertResponse, Request } from 
 import { fetchCssText, fetchWithLimit } from '../shared/css-fetch';
 import '../translate/background';
 import '../enhance/background';
+import '../update/background';
 import {
   CACHE_PREFIX,
   DEFAULT_SETTINGS,
