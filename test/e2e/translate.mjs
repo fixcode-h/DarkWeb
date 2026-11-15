@@ -232,32 +232,31 @@ async function main() {
     const fab1 = await sw.evaluate(async () => (await chrome.storage.local.get('translate')).translate.fab);
     check('侧边按钮：上下拖动，位置记住，仍吸附在右边缘', fab1.side === 'right' && Math.abs(fab1.y - 300 / 900) < 0.02, JSON.stringify(fab1));
     check('侧边按钮：拖动不会触发翻译', await page.evaluate(() => !document.querySelector('font.drak-tr')));
-    // 悬停后左侧出现菜单：翻译 / 阅读模式 / 屏蔽页面元素 / 本站暗色 / 隐藏按钮（本站、全部）
-    // 菜单在封闭的 Shadow DOM 里，只能按位置点：菜单右边缘在按钮左侧 8px，与按钮垂直居中
-    const menuAt = async (dx, dy) => {
-      await page.mouse.move(1270, 300);
-      await page.waitForTimeout(300);
-      await page.mouse.move(1280 + dx, 300 + dy, { steps: 4 });
-      await page.mouse.click(1280 + dx, 300 + dy);
+    // “译”下面一列贴边小按钮，点了直接生效：阅读模式 / 屏蔽页面元素 / 本站暗色，鼠标移上去后最下面多出“本站隐藏”
+    // 按钮在封闭的 Shadow DOM 里，只能按位置点：译 36px 高，小按钮 32px，隐藏 22px，间隔 6px
+    const tabAt = { reader: 340, picker: 378, dark: 416, hide: 449 };
+    const clickTab = async (y) => {
+      await page.mouse.move(1265, y, { steps: 3 });
+      await page.waitForTimeout(350);
+      await page.mouse.click(1265, y);
     };
     await page.mouse.move(1270, 300);
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(400);
     await page.screenshot({ path: join(root, 'test-results', 'fab-menu.png') });
     const darkMode = () => sw.evaluate(async (k) => (await chrome.storage.local.get('settings')).settings?.siteModes?.[k], `127.0.0.1:${port}`);
-    await menuAt(-200, 33);
+    await clickTab(tabAt.dark);
     await page.waitForTimeout(300);
-    check('侧边按钮菜单：关闭本站暗色', (await darkMode()) === 'off', String(await darkMode()));
-    await page.mouse.move(1270, 300);
+    check('侧边小按钮：关闭本站暗色', (await darkMode()) === 'off', String(await darkMode()));
+    await clickTab(tabAt.dark);
     await page.waitForTimeout(300);
-    await menuAt(-200, 33);
-    await page.waitForTimeout(300);
-    check('侧边按钮菜单：再点恢复本站暗色', (await darkMode()) !== 'off', String(await darkMode()));
-    await menuAt(-200, -40);
+    check('侧边小按钮：再点恢复本站暗色', (await darkMode()) !== 'off', String(await darkMode()));
+    await clickTab(tabAt.reader);
     await page.waitForSelector('[data-drak-reader]', { state: 'attached', timeout: 5000 }).catch(() => {});
-    check('侧边按钮菜单：打开阅读模式', await page.evaluate(() => !!document.querySelector('[data-drak-reader]')));
+    check('侧边小按钮：打开阅读模式', await page.evaluate(() => !!document.querySelector('[data-drak-reader]')));
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('[data-drak-reader]'));
-    await menuAt(-122, 73);
+    await page.mouse.move(1270, 300, { steps: 3 });
+    await clickTab(tabAt.hide);
     await page.waitForFunction(() => !document.querySelector('html > div[translate="no"][style*="2147483646"]'));
     const fab2 = await sw.evaluate(async () => (await chrome.storage.local.get('translate')).translate.fab);
     check("侧边按钮：本站隐藏", fab2.hiddenSites.length === 1 && fab2.hiddenSites[0] === `127.0.0.1:${port}`, JSON.stringify(fab2.hiddenSites));
