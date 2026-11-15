@@ -40,9 +40,11 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (tab?.id !== undefined) await runTool(tab.id, command === 'toggle-reader' ? 'reader' : 'picker');
 });
 
-// 设置页 / 弹窗按钮：对当前标签页打开
-chrome.runtime.onMessage.addListener((msg: { type?: string; tool?: string; tabId?: number }, _sender, sendResponse) => {
-  if (msg?.type !== 'enh:run' || (msg.tool !== 'reader' && msg.tool !== 'picker') || typeof msg.tabId !== 'number') return false;
-  runTool(msg.tabId, msg.tool).then((ok) => sendResponse({ ok }));
+// 设置页 / 弹窗按钮带 tabId；页面上的悬浮按钮不知道自己的 tabId，用发消息的标签页
+chrome.runtime.onMessage.addListener((msg: { type?: string; tool?: string; tabId?: number }, sender, sendResponse) => {
+  if (msg?.type !== 'enh:run' || (msg.tool !== 'reader' && msg.tool !== 'picker')) return false;
+  const tabId = typeof msg.tabId === 'number' ? msg.tabId : sender.tab?.id;
+  if (tabId === undefined) return false;
+  runTool(tabId, msg.tool).then((ok) => sendResponse({ ok }));
   return true;
 });

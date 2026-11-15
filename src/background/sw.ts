@@ -279,5 +279,15 @@ chrome.runtime.onMessage.addListener((msg: { type?: string; tabId?: number }, _s
     injectInto(msg.tabId).then(() => sendResponse({ ok: true }));
     return true;
   }
+  // 页面悬浮按钮里的“本站暗色”开关：和 Alt+Shift+D 一样，重新开启时补注入
+  if (msg?.type === 'fab:toggle-dark' && _s.tab?.id !== undefined && _s.tab.url && /^https?:/.test(_s.tab.url)) {
+    const { id, url } = _s.tab;
+    toggleSite(url)
+      .then(async (s) => {
+        if (siteModeFor(s, url) !== 'off') await injectInto(id);
+      })
+      .then(() => sendResponse({ ok: true }));
+    return true;
+  }
   return false;
 });
