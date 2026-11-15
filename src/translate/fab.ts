@@ -2,7 +2,9 @@
  * 页面侧边的翻译快捷按钮（静态内容脚本，只在顶层页面运行）。
  *
  * 贴在屏幕右边缘的半个标签，鼠标移上去整个滑出；点一下翻译，再点一下显示原文；
- * 按住可以上下拖动（始终吸附在右边缘）；悬停时左边出现“本站隐藏”“全部隐藏”。
+ * 按住可以上下拖动（始终吸附在右边缘）。
+ * 悬停时左边弹出菜单，只放常用的、一次一用的功能：翻译、阅读模式、屏蔽页面元素、本站暗色开关；
+ * 字体排版、护眼滤镜、自定义 CSS 这类设一次就不动的留在设置页，不往这里堆。底部是隐藏按钮（本站 / 全部）。
  * 按钮放在封闭的 Shadow DOM 里，页面样式和暗色配色都碰不到它。
  */
 import {
@@ -17,91 +19,28 @@ import {
   type PageStatus,
   type TranslateSettings,
 } from './settings';
+import { SETTINGS_KEY, normalizeSettings, siteModeFor, type Settings } from '../shared/settings';
+import { CSS, MENU_HTML } from './fab-style';
 
-const SIZE = 36;
-/** 平时露出的宽度：贴在右边缘的半个标签，鼠标移上去整个滑出 */
-const PEEK = 22;
 const DRAG_THRESHOLD = 5;
-
-// 配色、圆角、动效照 AgentPanel 的默认配色（Claude Code）：中性灰面板、蓝色强调、10px 浮层圆角、120ms snap 进场
-const CSS = `
-:host { all: initial; }
-.wrap {
-  --card: #1f1f1f; --pop: #303030; --fg: #ececec; --muted: #c6c6c6; --subtle: #9c9c9c;
-  --edge: rgb(255 255 255 / .1); --hover: rgb(255 255 255 / .07); --active: rgb(255 255 255 / .11);
-  --accent: #257de0; --accent-text: #6aabf1; --on-accent: #fff;
-  --shadow-pop: 0 8px 24px rgb(0 0 0 / .32), 0 2px 6px rgb(0 0 0 / .2);
-  --ease-snap: cubic-bezier(.32, .72, 0, 1); --ease-spring: cubic-bezier(.34, 1.3, .64, 1);
-  position: fixed; z-index: 2147483646; top: 0; right: 0; display: flex; flex-direction: row-reverse; align-items: center; gap: 8px;
-  transform: translateY(-50%); font: 13px/1.4 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-  -webkit-user-select: none; user-select: none; color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  .wrap {
-    --card: #fff; --pop: #fff; --fg: #191919; --muted: #404040; --subtle: #666;
-    --edge: rgb(0 0 0 / .1); --hover: rgb(0 0 0 / .05); --active: rgb(0 0 0 / .09); --accent-text: #1757ac;
-    --shadow-pop: 0 8px 24px rgb(0 0 0 / .12), 0 2px 6px rgb(0 0 0 / .08);
-    color-scheme: light;
-  }
-}
-.btn {
-  position: relative; box-sizing: border-box; width: ${SIZE + 6}px; height: ${SIZE}px; border-radius: ${SIZE / 2}px 0 0 ${SIZE / 2}px; padding: 0 6px 0 0;
-  border: 1px solid var(--edge); border-right: 0; background: var(--card); color: var(--muted);
-  box-shadow: var(--shadow-pop); cursor: pointer;
-  display: grid; place-items: center; font-weight: 600; font-size: 14px; touch-action: none;
-  transform: translateX(${SIZE + 6 - PEEK}px); opacity: .6;
-  transition: transform 200ms var(--ease-snap), opacity 120ms, background 60ms, color 60ms;
-}
-.btn::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: transparent; transition: background 60ms; }
-.label { position: relative; transition: transform 200ms var(--ease-spring); }
-.open .btn, .on .btn, .dragging .btn { transform: none; opacity: 1; }
-.btn:hover { color: var(--fg); }
-.btn:hover::before { background: var(--hover); }
-.btn:active::before { background: var(--active); }
-.btn:active .label { transform: scale(.9); transition-duration: 60ms; }
-.dragging .btn { cursor: grabbing; }
-.on .btn { background: var(--accent); border-color: transparent; color: var(--on-accent); }
-.on .btn:hover::before { background: rgb(255 255 255 / .1); }
-.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.ring {
-  position: absolute; inset: 5px 11px 5px 5px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent);
-  opacity: 0; transition: opacity 120ms; animation: spin .8s linear infinite;
-}
-.on .ring { border-top-color: var(--on-accent); }
-.busy .ring { opacity: 1; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.menu {
-  display: flex; flex-direction: column; padding: 4px; border-radius: 10px;
-  background: var(--pop); border: 1px solid var(--edge); box-shadow: var(--shadow-pop);
-  opacity: 0; visibility: hidden; pointer-events: none; transform: scale(.96); transform-origin: right center;
-  transition: opacity 60ms, transform 60ms, visibility 0s 60ms;
-}
-.open:not(.dragging) .menu {
-  opacity: 1; visibility: visible; pointer-events: auto; transform: none;
-  transition: opacity 120ms var(--ease-snap), transform 120ms var(--ease-snap), visibility 0s;
-}
-.menu button {
-  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; border-radius: 7px; white-space: nowrap; color: var(--fg); transition: background 60ms;
-}
-.menu svg { width: 14px; height: 14px; flex: none; color: var(--subtle); }
-.menu button:hover, .menu button:focus-visible { background: var(--hover); }
-.menu button:active { background: var(--active); }
-@media (prefers-reduced-motion: reduce) { .btn, .menu, .label, .open:not(.dragging) .menu { transition: none; } }
-@media print { .wrap { display: none; } }
-`;
 
 class Fab {
   private host: HTMLElement | null = null;
   private wrap!: HTMLElement;
   private btn!: HTMLButtonElement;
+  private menu!: HTMLElement;
+  private root!: ShadowRoot;
+  private hover = false;
   private settings!: TranslateSettings;
   private readonly site = siteKeyOf(location.host);
   private state: PageState = { active: false, busy: false };
+  /** 暗色模式设置，用来显示“本站暗色”开关的状态 */
+  private dark: Settings | null = null;
   private closeTimer = 0;
 
   async init(): Promise<void> {
     this.settings = await loadTranslate();
+    this.dark = normalizeSettings((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
     // 页面里可能已经有翻译脚本（自动翻译的站点、扩展重载）
     const tr = (window as unknown as { __drakTranslate?: { status(): PageStatus } }).__drakTranslate;
     if (tr) this.state.active = tr.status().active;
@@ -114,6 +53,10 @@ class Fab {
       this.render();
     });
     chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[SETTINGS_KEY]) {
+        this.dark = normalizeSettings(changes[SETTINGS_KEY].newValue);
+        this.render();
+      }
       if (area !== 'local' || !changes[TRANSLATE_KEY]) return;
       this.settings = normalizeTranslate(changes[TRANSLATE_KEY].newValue);
       this.sync();
@@ -150,19 +93,27 @@ class Fab {
     root.innerHTML = `<style>${CSS}</style>
       <div class="wrap" part="wrap">
         <button class="btn" type="button" aria-label="翻译此页面"><span class="ring"></span><span class="label">译</span></button>
-        <div class="menu">
-          <button type="button" data-act="site"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-2.6 3.4M6.6 6.6C3.9 8.4 2.5 12 2.5 12S6 19 12 19a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>本站隐藏</button>
-          <button type="button" data-act="all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>全部隐藏</button>
-        </div>
+        ${MENU_HTML}
       </div>`;
     this.wrap = root.querySelector('.wrap')!;
     this.btn = root.querySelector('.btn')!;
     this.host = host;
 
-    this.wrap.addEventListener('pointerenter', () => this.open(true));
-    this.wrap.addEventListener('pointerleave', () => this.open(false));
-    this.btn.addEventListener('focus', () => this.open(true));
-    this.btn.addEventListener('blur', () => this.open(false));
+    this.root = root;
+    // 鼠标在按钮或菜单上就展开；键盘用 Tab 走进来时也展开，焦点离开整个按钮区才收起。
+    // 鼠标点过按钮后焦点会留在按钮上（不是 :focus-visible），这时只看鼠标，否则移开后菜单收不回去
+    this.wrap.addEventListener('pointerenter', () => {
+      this.hover = true;
+      this.open(true);
+    });
+    this.wrap.addEventListener('pointerleave', () => {
+      this.hover = false;
+      if (!this.wrap.querySelector(':focus-visible')) this.open(false);
+    });
+    this.wrap.addEventListener('focusin', () => this.open(true));
+    this.wrap.addEventListener('focusout', (e) => {
+      if (!this.hover && !this.wrap.contains(e.relatedTarget as Node | null)) this.open(false);
+    });
     this.btn.addEventListener('pointerdown', (e) => this.drag(e));
     this.btn.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -170,16 +121,43 @@ class Fab {
         this.toggle();
       }
     });
-    root.querySelector('.menu')!.addEventListener('click', (e) => {
-      const act = (e.target as HTMLElement).closest('button')?.dataset.act;
-      if (act === 'site') void this.save({ hiddenSites: [...this.settings.fab.hiddenSites.filter((s) => s !== this.site), this.site] });
-      if (act === 'all') void this.save({ enabled: false });
+    this.menu = root.querySelector('.menu')!;
+    this.menu.addEventListener('click', (e) => {
+      const el = (e.target as HTMLElement).closest('button');
+      if (!el || el.getAttribute('aria-disabled') === 'true') return;
+      const act = el.dataset.act;
+      if (act === 'translate') this.toggle();
+      else if (act === 'reader' || act === 'picker') {
+        // 阅读模式盖住整页、点选屏蔽要点页面元素：先把菜单收起来
+        this.close();
+        void chrome.runtime.sendMessage({ type: 'enh:run', tool: act }).catch(() => {});
+      } else if (act === 'dark') void chrome.runtime.sendMessage({ type: 'fab:toggle-dark' }).catch(() => {});
+      else if (act === 'site') void this.save({ hiddenSites: [...this.settings.fab.hiddenSites.filter((s) => s !== this.site), this.site] });
+      else if (act === 'all') void this.save({ enabled: false });
     });
+  }
+
+  private close(): void {
+    clearTimeout(this.closeTimer);
+    this.wrap.classList.remove('open');
+    (this.root.activeElement as HTMLElement | null)?.blur();
+  }
+
+  /** 菜单默认与按钮垂直居中；按钮靠近屏幕上下边时把菜单往里推，不出屏 */
+  private fit(): void {
+    const btn = this.btn.getBoundingClientRect();
+    const h = this.menu.offsetHeight;
+    const top = btn.top + btn.height / 2 - h / 2;
+    const dy = Math.max(8 - top, 0) || Math.min(window.innerHeight - 8 - (top + h), 0);
+    this.menu.style.setProperty('--dy', `${Math.round(dy)}px`);
   }
 
   private open(on: boolean): void {
     clearTimeout(this.closeTimer);
-    if (on) this.wrap.classList.add('open');
+    if (on) {
+      if (!this.wrap.classList.contains('open')) this.fit();
+      this.wrap.classList.add('open');
+    }
     // 稍等再收起，鼠标从按钮移到菜单时不会闪
     else this.closeTimer = window.setTimeout(() => this.wrap.classList.remove('open'), 250);
   }
@@ -197,6 +175,18 @@ class Fab {
     this.btn.setAttribute('aria-label', label);
     this.btn.title = `${label}（Alt+Shift+T）\n按住可拖动`;
     this.btn.querySelector('.label')!.textContent = this.state.active ? '原' : '译';
+    this.wrap.classList.toggle('on-tr', this.state.active);
+    this.menu.querySelector('.tr-label')!.textContent = label;
+
+    // 本站暗色：全局开着且本站没被关掉就算开；全局关了这里开不了，提示去弹窗打开
+    const d = this.dark;
+    const darkOn = !!d && d.enabled && siteModeFor(d, location.host) !== 'off';
+    const darkItem = this.menu.querySelector<HTMLElement>('[data-act="dark"]')!;
+    this.wrap.classList.toggle('dark-on', darkOn);
+    darkItem.setAttribute('aria-checked', String(darkOn));
+    darkItem.setAttribute('aria-disabled', String(!!d && !d.enabled));
+    darkItem.querySelector('.hint')!.textContent = d && !d.enabled ? '暗色模式已全局关闭' : '';
+    darkItem.title = 'Alt+Shift+D';
   }
 
   private toggle(): void {
