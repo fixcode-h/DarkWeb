@@ -109,9 +109,51 @@ async function main() {
     await ctx.close();
     rmSync(userData, { recursive: true, force: true });
   }
+  await storeChecks();
   const failed = results.filter((r) => !r.ok);
   console.log(`\n检查更新验收：${results.length - failed.length} / ${results.length} 通过`);
   process.exit(failed.length ? 1 : 0);
+}
+
+// 商店包（node scripts/build.mjs --store 生成的 dist-store）：不带更新按钮、不定时访问 GitHub
+async function storeChecks() {
+  const storeDist = join(root, 'dist-store');
+  const userData = mkdtempSync(join(tmpdir(), 'drak-upd-store-'));
+  const ctx = await chromium.launchPersistentContext(userData, {
+    channel: 'chromium',
+    headless: true,
+    args: [`--disable-extensions-except=${storeDist}`, `--load-extension=${storeDist}`],
+  });
+  let github = 0;
+  await ctx.route('https://api.github.com/**', (route) => {
+    github++;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  try {
+    const sw = ctx.serviceWorkers()[0] || (await ctx.waitForEvent('serviceworker'));
+    const id = new URL(sw.url()).host;
+    const page = await ctx.newPage();
+    await page.goto(`chrome-extension://${id}/popup.html`);
+    await page.waitForSelector('footer');
+    const popup = await page.evaluate(() => ({
+      row: !!document.getElementById('updateRow') || !!document.getElementById('checkUpdate'),
+      text: document.body.textContent.includes('检查更新'),
+    }));
+    check('商店包：弹窗没有检查更新', !popup.row && !popup.text, JSON.stringify(popup));
+    await page.goto(`chrome-extension://${id}/options.html`);
+    await page.waitForSelector('body');
+    await page.waitForTimeout(300);
+    const options = await page.evaluate(() => ({ card: !!document.getElementById('update'), text: document.body.textContent.includes('版本与更新') }));
+    check('商店包：设置页没有版本与更新', !options.card && !options.text, JSON.stringify(options));
+    await page.waitForTimeout(500);
+    const alarm = await sw.evaluate(() => chrome.alarms.get('drak-update-check'));
+    check('商店包：后台不定时检查 GitHub', !alarm && github === 0, `alarm=${!!alarm} github=${github}`);
+  } catch (e) {
+    check('商店包：运行出错', false, String(e));
+  } finally {
+    await ctx.close();
+    rmSync(userData, { recursive: true, force: true });
+  }
 }
 
 main();

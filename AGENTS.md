@@ -12,7 +12,7 @@
    - 再跑一遍类型检查、单元测试、端到端验收
    - 生成发布说明，构建并发布 GitHub Release，附两个包：
      - `drak-<版本>.zip`：manifest 带 `key`，本地“加载已解压的扩展程序”时 ID 固定
-     - `drak-<版本>-store.zip`：不带 `key`，上传 Chrome 应用商店用（带 `key` 的包会被商店拒）
+     - `drak-<版本>-store.zip`：不带 `key`，上传 Chrome 应用商店用（带 `key` 的包会被商店拒）；也不带检查更新（商店自动更新），由 `scripts/build.mjs` 的 `buildStoreDir` 去掉
    - 配好 `CWS_*` Secrets 后，把商店版自动上传到 Chrome 应用商店并提交审核，见 [docs/store/README.md](docs/store/README.md)
 
 不要往 `main` 直接 push，也不要从功能分支直接开 PR 到 `main`。
