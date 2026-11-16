@@ -4,11 +4,10 @@
  */
 
 export const REPO = 'fixcode-h/DarkWeb';
-export const RELEASES_API = `https://api.github.com/repos/${REPO}/releases?per_page=30`;
-export const RELEASES_PAGE = `https://github.com/${REPO}/releases`;
+// 写成完整字面量（不拼 REPO）：商店包里没用到它们，压缩器才能删干净
+export const RELEASES_API = 'https://api.github.com/repos/fixcode-h/DarkWeb/releases?per_page=30';
+export const RELEASES_PAGE = 'https://github.com/fixcode-h/DarkWeb/releases';
 export const UPDATE_KEY = 'drak-update';
-/** 商店版：浏览器已下载好、等待重启生效的新版本号 */
-export const PENDING_KEY = 'drak-update-pending';
 
 /** GitHub Releases 接口里我们用到的字段 */
 export interface GhRelease {

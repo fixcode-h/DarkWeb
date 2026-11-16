@@ -3,7 +3,7 @@
  * 提示条由脚本插入，弹窗的 HTML 只多两个挂载点，样式在 update.css，免得和弹窗整体样式的改动打架。
  */
 import { hasUpdate } from './check';
-import { checkNow, currentVersion, installKind, loadState } from './run';
+import { checkNow, currentVersion, loadState } from './run';
 
 const slot = document.getElementById('updateSlot');
 const link = document.getElementById('checkUpdate');
@@ -33,15 +33,12 @@ function show(text: string, action?: string): void {
 
 async function init(): Promise<void> {
   const current = currentVersion();
-  const kind = await installKind();
   if (versionText) versionText.textContent = `版本 ${current}`;
   const s = await loadState();
-  if (kind !== 'store' && s && hasUpdate(s, current)) show(`有新版本 ${s.newer[0].version}`, '查看改动并更新');
+  if (s && hasUpdate(s, current)) show(`有新版本 ${s.newer[0].version}`, '查看改动并更新');
 
   link?.addEventListener('click', async (e) => {
     e.preventDefault();
-    // 商店版的检查和重启都在设置页里
-    if (kind === 'store') return openUpdatePage();
     show('正在检查更新…');
     const r = await checkNow();
     if (r.error) show(`检查失败：${r.error}`);
