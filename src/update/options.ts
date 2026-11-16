@@ -1,10 +1,11 @@
 /**
  * 设置页的“版本与更新”卡片。
- * Chrome 不允许扩展替换自己的安装包：商店版交给浏览器更新；解压安装的版本下载新 zip，
+ * Chrome 不允许扩展替换自己的安装包：解压安装的版本下载新 zip，
  * 用户解压覆盖原文件夹后，在这里点“重新加载”就能换上新版（不用再去 chrome://extensions）。
+ * 只有普通包有这张卡片；商店包由浏览器自动更新，出包时整个功能都被剔除（见 scripts/build.mjs）。
  */
-import { PENDING_KEY, RELEASES_PAGE, hasUpdate, type UpdateState } from './check';
-import { checkNow, currentVersion, installKind, loadState, storeCheck, type InstallKind } from './run';
+import { RELEASES_PAGE, hasUpdate, type UpdateState } from './check';
+import { checkNow, currentVersion, installKind, loadState, type InstallKind } from './run';
 
 const root = document.getElementById('update');
 
@@ -21,7 +22,6 @@ function when(ms: number): string {
 }
 
 const KIND_TEXT: Record<InstallKind, string> = {
-  store: '从应用商店安装，浏览器会自动更新',
   unpacked: '以“加载已解压的扩展程序”方式安装',
   other: '从安装包安装',
 };
@@ -37,37 +37,18 @@ async function render(note = ''): Promise<void> {
   );
   const body: Node[] = [];
 
-  if (kind === 'store') {
-    const pending = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY] as string | undefined;
-    if (pending) {
-      body.push(el('p', { className: 'upd-status' }, `新版本 ${pending} 已下载好，重启扩展后生效。`));
-      head.append(btn('立即重启以更新', true, () => chrome.runtime.reload()));
-    } else {
-      head.append(btn('检查更新', true, async () => {
-        const r = await storeCheck();
-        const text = {
-          update_available: '发现新版本，浏览器正在下载，下载完这里会出现“立即重启以更新”。',
-          no_update: '已是最新版本。',
-          throttled: '刚检查过，浏览器限制了检查频率，请过几分钟再试。',
-          error: '检查失败，请稍后再试。',
-        }[r];
-        void render(text);
-      }));
-    }
-  } else {
-    const s = await loadState();
-    const fresh = s && s.current === current ? s : null;
-    head.append(btn(busy ? '正在检查…' : '检查更新', !hasUpdate(fresh, current), async () => {
-      busy = true;
-      void render();
-      const r = await checkNow();
-      busy = false;
-      void render(r.error ? '' : hasUpdate(r, current) ? '' : '已是最新版本。');
-    }, busy));
-    if (fresh?.error) body.push(el('p', { className: 'errors' }, `检查失败：${fresh.error}`));
-    if (fresh && hasUpdate(fresh, current)) body.push(...updateBlock(fresh, kind));
-    else if (fresh && !fresh.error) body.push(el('p', { className: 'hint' }, `上次检查 ${when(fresh.checkedAt)}，已是最新版本。`));
-  }
+  const s = await loadState();
+  const fresh = s && s.current === current ? s : null;
+  head.append(btn(busy ? '正在检查…' : '检查更新', !hasUpdate(fresh, current), async () => {
+    busy = true;
+    void render();
+    const r = await checkNow();
+    busy = false;
+    void render(r.error ? '' : hasUpdate(r, current) ? '' : '已是最新版本。');
+  }, busy));
+  if (fresh?.error) body.push(el('p', { className: 'errors' }, `检查失败：${fresh.error}`));
+  if (fresh && hasUpdate(fresh, current)) body.push(...updateBlock(fresh, kind));
+  else if (fresh && !fresh.error) body.push(el('p', { className: 'hint' }, `上次检查 ${when(fresh.checkedAt)}，已是最新版本。`));
   if (note) body.unshift(el('p', { className: 'upd-status' }, note));
   root.replaceChildren(el('h2', {}, '版本与更新'), head, ...body);
 }

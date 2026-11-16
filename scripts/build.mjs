@@ -2,7 +2,7 @@
 // 设置 BUILD_NUMBER 时，manifest 版本号写成 <version>.<BUILD_NUMBER>：Chrome 应用商店要求每次上传的版本号都更大
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
@@ -22,6 +22,8 @@ const common = {
   minify: zip,
   sourcemap: zip ? false : 'inline',
   logLevel: 'warning',
+  // 出包渠道（src/update/background.ts）：普通包 false；商店包在下面 buildStoreDir 里用 true 重新构建后台
+  define: { __DRAK_STORE__: 'false' },
 };
 
 await Promise.all([
@@ -135,6 +137,31 @@ function icon(size) {
 }
 for (const s of [16, 32, 48, 128]) writeFileSync(join(dist, 'icons', `icon-${s}.png`), icon(s));
 
+/**
+ * 商店版目录：在 dist 的基础上
+ * - 去掉 manifest 里的 key。商店用自己的密钥给扩展签名，ID 由商店决定；
+ *   key 只用于让本地安装的包保持固定 ID，新包覆盖旧包而不是装成另一个扩展
+ * - 去掉检查更新：商店版由浏览器自动更新，不显示更新按钮、不访问 GitHub。
+ *   页面里的入口和脚本删掉，后台用 __DRAK_STORE__ = true 重新构建，定时检查被整段剔除
+ */
+async function buildStoreDir(target) {
+  rmSync(target, { recursive: true, force: true });
+  cpSync(dist, target, { recursive: true });
+  await build({ ...common, define: { __DRAK_STORE__: 'true' }, entryPoints: [join(root, 'src/background/sw.ts')], outfile: join(target, 'sw.js'), format: 'esm' });
+  for (const f of ['update-popup.js', 'update-options.js', 'update.css']) rmSync(join(target, f));
+  // 每个页面要删掉的行数：样式表、挂载点、脚本各一行，对不上说明 HTML 改过，宁可出包失败也不漏删
+  const hooks = { 'popup.html': 4, 'options.html': 3 };
+  const pattern = /update\.css|id="updateSlot"|id="updateRow"|id="update"|update-(popup|options)\.js/;
+  for (const [f, n] of Object.entries(hooks)) {
+    const lines = readFileSync(join(target, f), 'utf8').split('\n');
+    const kept = lines.filter((l) => !pattern.test(l));
+    if (lines.length - kept.length !== n) throw new Error(`商店版去掉 ${f} 里的检查更新入口时，删掉了 ${lines.length - kept.length} 行，应为 ${n} 行`);
+    writeFileSync(join(target, f), kept.join('\n'));
+  }
+  const { key: _key, ...storeManifest } = manifest;
+  writeFileSync(join(target, 'manifest.json'), JSON.stringify(storeManifest, null, 2));
+}
+
 if (zip) {
   const out = join(root, 'release');
   mkdirSync(out, { recursive: true });
@@ -145,15 +172,17 @@ if (zip) {
   rmSync(file, { force: true });
   execFileSync('zip', ['-qr', file, '.'], { cwd: dist });
   console.log(`packed ${file}`);
-  // 商店版：去掉 manifest 里的 key。商店用自己的密钥给扩展签名，ID 由商店决定；
-  // key 只用于让本地安装的包保持固定 ID，新包覆盖旧包而不是装成另一个扩展
+  const storeDir = join(root, 'dist-store');
+  await buildStoreDir(storeDir);
   const storeFile = join(out, `drak-${manifest.version}-store.zip`);
-  const { key: _key, ...storeManifest } = manifest;
-  writeFileSync(join(dist, 'manifest.json'), JSON.stringify(storeManifest, null, 2));
   rmSync(storeFile, { force: true });
-  execFileSync('zip', ['-qr', storeFile, '.'], { cwd: dist });
-  writeFileSync(join(dist, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  execFileSync('zip', ['-qr', storeFile, '.'], { cwd: storeDir });
+  rmSync(storeDir, { recursive: true, force: true });
   console.log(`packed ${storeFile}`);
+} else if (process.argv.includes('--store')) {
+  // 端到端验收用：只生成商店版目录，不打包
+  await buildStoreDir(join(root, 'dist-store'));
+  console.log(`built ${dist} and dist-store`);
 } else {
   console.log(`built ${dist}`);
 }

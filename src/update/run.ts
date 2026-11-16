@@ -4,12 +4,10 @@
  */
 import { RELEASES_API, UPDATE_KEY, buildState, hasUpdate, type GhRelease, type UpdateState } from './check';
 
-/** 安装来源：商店版由浏览器自己更新，其余（解压安装、拖入安装）只能从 GitHub 下载新包 */
-export type InstallKind = 'store' | 'unpacked' | 'other';
+/** 安装来源：解压安装可以覆盖文件后在设置页重新加载；其余要去扩展管理页处理 */
+export type InstallKind = 'unpacked' | 'other';
 
 export async function installKind(): Promise<InstallKind> {
-  // 商店装的扩展，浏览器会在 manifest 里写入 update_url；我们自己的包里没有这个字段
-  if (chrome.runtime.getManifest().update_url) return 'store';
   try {
     const self = await chrome.management.getSelf();
     return self.installType === 'development' ? 'unpacked' : 'other';
@@ -61,15 +59,4 @@ export async function checkNow(): Promise<UpdateState> {
   await chrome.storage.local.set({ [UPDATE_KEY]: state });
   await refreshBadge(state);
   return state;
-}
-
-/** 商店版：请浏览器马上向商店检查。有新版时浏览器会在后台下载，下载完触发 onUpdateAvailable */
-export async function storeCheck(): Promise<'update_available' | 'no_update' | 'throttled' | 'error'> {
-  try {
-    const r = (await chrome.runtime.requestUpdateCheck()) as unknown as { status: string } | string;
-    const status = typeof r === 'string' ? r : r.status;
-    return status === 'update_available' || status === 'no_update' || status === 'throttled' ? status : 'error';
-  } catch {
-    return 'error';
-  }
 }
