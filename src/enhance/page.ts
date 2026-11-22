@@ -56,6 +56,11 @@ void loadEnhance().then((s) => {
   // 有的网站会整体替换 <body> 之后再 append 到 <html>，把我们的样式挤到前面；页面加载完再排一次
   document.addEventListener('DOMContentLoaded', () => current && apply(current), { once: true });
 });
+// 有的页面会整块替换 <html> 下的节点，把挂上去的样式一起删掉；被删了就补回去，屏蔽规则才不会失效
+new MutationObserver(() => {
+  if (!current) return;
+  if ((rules && !rules.isConnected && site && siteRulesCss(current, site)) || (style && !style.isConnected && enhanceActiveOn(current, site) && fontCss(current.font))) apply(current);
+}).observe(document.documentElement, { childList: true });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[ENHANCE_KEY]) return;
   current = normalizeEnhance(changes[ENHANCE_KEY].newValue);

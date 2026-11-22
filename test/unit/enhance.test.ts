@@ -51,7 +51,7 @@ describe('划词翻译', () => {
 });
 
 import { safeSelector, siteRulesCss } from '../../src/enhance/settings';
-import { looksStable } from '../../src/enhance/selector';
+import { looksHashed, looksStable } from '../../src/enhance/selector';
 describe('屏蔽规则与自定义 CSS', () => {
   it('选择器不能跳出规则', () => {
     expect(safeSelector('div.ad')).toBe('div.ad');
@@ -81,6 +81,13 @@ describe('屏蔽规则与自定义 CSS', () => {
     expect(looksStable('_3kF9aQ')).toBe(false);
     expect(looksStable('a1b2c3d4')).toBe(false);
     expect(looksStable('123')).toBe(false);
+  });
+  it('哈希类名可作次选，带长串数字的不用', () => {
+    expect(looksHashed('css-1x2y3z')).toBe(true);
+    expect(looksHashed('_3kF9aQ')).toBe(true);
+    expect(looksHashed('sidebar')).toBe(false);
+    expect(looksHashed('ad-1732223344')).toBe(false);
+    expect(looksHashed('123abc')).toBe(false);
   });
 });
 
