@@ -40,7 +40,8 @@ Drak 暗色模式（下称“本扩展”）是一个把网页重新配色为暗
 为了给网页重新配色，本扩展需要在你的浏览器里读取并改写页面的样式。所有处理都在本机完成：
 
 - **网页样式和图片**：读取页面的 CSS 和图片的颜色信息来计算暗色配色。个别跨域的样式表或图片无法在页面内直接读取时，扩展会在浏览器内再向它原本的地址请求一次。这个请求只发给该资源原来的服务器，结果只在本机用于配色，不会发给其他任何地方。
-- **设置**：全局开关、各网站的模式、亮度与对比度、你写的站点规则、翻译设置、阅读增强设置（字体、滤镜、阅读模式偏好、按网站的屏蔽规则和自定义 CSS，全部在本地处理），保存在浏览器本地存储（`chrome.storage.local`）。
+- **设置**：全局开关、各网站的模式、亮度与对比度、你写的站点规则、翻译设置、阅读增强设置（字体、滤镜、阅读模式偏好、按网站的屏蔽规则和自定义 CSS，全部在本地处理）、Markdown 文件设置，保存在浏览器本地存储（`chrome.storage.local`）。
+- **Markdown 文件**：在浏览器里打开 .md 文件时，扩展在本机把它渲染成排版好的页面。你编辑后还没保存的内容会作为草稿暂存在本地存储里（最多保留最近 30 份，保存或丢弃后删除）；保存时只写入你在浏览器文件对话框里选择的文件。文件内容不会发送到任何地方。
 - **样式缓存**：为了避免页面打开时闪白，扩展会把每个网站算好的暗色样式缓存在本地存储里，可以在设置页清除。
 - **网站的主题 Cookie**：少数网站（例如知乎）用 Cookie 来决定是否显示自带的暗色主题。在这些网站上，扩展可能会写入该网站自己的主题 Cookie 来切换到它的原生暗色；关闭后会恢复为原来的值。扩展不会读取或传出其他 Cookie。
 
@@ -80,7 +81,8 @@ Drak Dark Mode ("the extension") recolors web pages into a dark theme and offers
 Everything is processed locally in your browser:
 
 - **Page styles and images** are read to compute dark colors. When a cross-origin stylesheet or image cannot be read from the page, the extension requests it again from its original URL inside the browser. The request goes only to that resource's original server, and the result is used only on your device.
-- **Settings** (global switch, per-site mode, brightness, contrast, your custom site rules, translation settings) are stored in `chrome.storage.local`.
+- **Settings** (global switch, per-site mode, brightness, contrast, your custom site rules, translation settings, Markdown file settings) are stored in `chrome.storage.local`.
+- **Markdown files** you open in the browser are rendered locally. Unsaved edits are kept as local drafts (at most the 30 most recent, deleted when saved or discarded); saving writes only to the file you pick in the browser's file dialog. File contents are never sent anywhere.
 - **A style cache** per site is stored locally to avoid a white flash on page load. You can clear it on the options page.
 - **Site theme cookies**: on a few sites that select their built-in dark theme by cookie (for example zhihu.com), the extension may set that site's own theme cookie and restores the original value when turned off. It does not read or transmit any other cookie.
 
