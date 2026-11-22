@@ -69,6 +69,12 @@ function taskRow(t: Task): HTMLElement {
 
 async function render(): Promise<void> {
   if (!slot) return;
+  // 下拉框开着时不重画（下载进度每秒都在变），选完再画
+  const focused = document.activeElement;
+  if (focused instanceof HTMLSelectElement && slot.contains(focused)) {
+    focused.addEventListener('blur', () => void render(), { once: true });
+    return;
+  }
   const settings = await loadSniff();
   const s = await ask<SniffState>({ type: 'sniff:state' }).catch(() => null);
   if (!s) return;
