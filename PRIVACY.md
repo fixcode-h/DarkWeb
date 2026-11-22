@@ -27,6 +27,12 @@ Drak 暗色模式（下称“本扩展”）是一个把网页重新配色为暗
 
 不是从应用商店安装的版本（例如解压安装），每天会、以及你点“检查更新”时，向 GitHub 的公开接口（`api.github.com`）请求一次本项目的发布列表，用来判断有没有新版本、显示改动说明。这个请求不带任何你的设置、浏览记录或网页内容；GitHub 能看到的只有普通网络请求都有的 IP 地址等信息。点“下载”时会在新标签页打开 GitHub 上的安装包地址。从应用商店安装的版本不包含这个功能，不会访问 GitHub，由浏览器向商店检查更新。
 
+## 资源嗅探
+
+资源嗅探默认关闭。开启后，也只有在你点了页面右侧的“嗅探”按钮（或弹窗里的“开始嗅探”）的标签页上，本扩展才会查看该标签页发出的网络请求的地址、类型和大小，用来列出可下载的视频和音频。这个列表只保存在浏览器的会话存储里，停止嗅探或关闭标签页即清空，不会上传。
+
+你点“下载”时，本扩展只向媒体原本所在的服务器请求文件（必要时带上原页面地址作为 Referer，并带上你在该网站的登录状态，和网页播放时一样），在本机合并后保存到下载文件夹。本扩展不支持也不会尝试下载 DRM 加密的内容。
+
 ## 本扩展在你的设备上处理什么
 
 为了给网页重新配色，本扩展需要在你的浏览器里读取并改写页面的样式。所有处理都在本机完成：
@@ -45,6 +51,10 @@ Drak 暗色模式（下称“本扩展”）是一个把网页重新配色为暗
 - **脚本（scripting）**：按你的设置把配色脚本注入网页，并在你关闭某个网站时不再注入。
 - **定时器（alarms）**：在你设定的时间段自动开关暗色模式。
 - **右键菜单（contextMenus）**：在页面右键菜单里加入“翻译此页面 / 显示原文”。
+- **网络请求（webRequest）**：资源嗅探时，只在你点了“嗅探”的标签页上查看媒体请求的类型和大小；不拦截、不修改。
+- **离屏文档（offscreen）**：资源嗅探下载时，在后台合并视频分片。
+- **修改请求头（declarativeNetRequestWithHostAccess）**：资源嗅探下载分片时补上原页面的 Referer，只作用于扩展自己发出的请求。
+- **管理下载内容（downloads，可选）**：资源嗅探把文件保存到下载文件夹；开启资源嗅探时才会申请。
 
 ## 变更
 
@@ -73,7 +83,7 @@ Everything is processed locally in your browser:
 - **A style cache** per site is stored locally to avoid a white flash on page load. You can clear it on the options page.
 - **Site theme cookies**: on a few sites that select their built-in dark theme by cookie (for example zhihu.com), the extension may set that site's own theme cookie and restores the original value when turned off. It does not read or transmit any other cookie.
 
-Permissions: access to all websites is needed so dark mode can run on every page you visit; `storage` and `unlimitedStorage` hold settings and the style cache; `scripting` injects the recoloring script according to your settings; `alarms` switches dark mode on and off on the schedule you set; `contextMenus` adds "Translate this page / Show original" to the page context menu.
+Permissions: access to all websites is needed so dark mode can run on every page you visit; `storage` and `unlimitedStorage` hold settings and the style cache; `scripting` injects the recoloring script according to your settings; `alarms` switches dark mode on and off on the schedule you set; `contextMenus` adds "Translate this page / Show original" to the page context menu; `webRequest`, `offscreen`, `declarativeNetRequestWithHostAccess` and the optional `downloads` permission are used only by the media sniffer (off by default). The sniffer looks at request types and sizes only in a tab where you clicked "Sniff", keeps the list in session storage until the tab closes, and downloads files only from the server they came from. It never downloads DRM-protected content.
 
 If a future version adds another feature that sends data off your device, this policy and the store listing's data disclosure will be updated before that version is released.
 

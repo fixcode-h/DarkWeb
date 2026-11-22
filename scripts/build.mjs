@@ -46,6 +46,15 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/enhance/popup.ts')], outfile: join(dist, 'enhance-popup.js'), format: 'iife' }),
 ]);
 
+// 资源嗅探（src/sniff/）
+await Promise.all([
+  build({ ...common, entryPoints: [join(root, 'src/sniff/popup.ts')], outfile: join(dist, 'sniff-popup.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/sniff/options.ts')], outfile: join(dist, 'sniff-options.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/sniff/offscreen.ts')], outfile: join(dist, 'sniff-offscreen.js'), format: 'iife' }),
+]);
+copyFileSync(join(root, 'src/sniff/sniff.css'), join(dist, 'sniff.css'));
+copyFileSync(join(root, 'src/sniff/offscreen.html'), join(dist, 'sniff-offscreen.html'));
+
 // 检查更新（src/update/）：弹窗入口和设置页卡片
 await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/update/popup.ts')], outfile: join(dist, 'update-popup.js'), format: 'iife' }),

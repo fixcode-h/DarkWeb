@@ -2,6 +2,8 @@
  * 侧边快捷按钮的样式和图标。
  * 配色、圆角、动效照 AgentPanel 的默认配色（Claude Code）：中性灰面板、蓝色强调、120ms snap 进场、弹簧曲线。
  */
+import { SNIFF_TOOL_HTML } from '../sniff/fab-panel';
+
 export const SIZE = 36;
 /** 平时露出的宽度：贴在右边缘的半个标签，鼠标移上去整个滑出 */
 export const PEEK = 22;
@@ -123,5 +125,6 @@ export const CSS = `
 export const TOOLS_HTML = `
 <button class="tab tool" type="button" data-act="reader" style="--i:1" data-tip="阅读模式" aria-label="阅读模式">${ICONS.reader}</button>
 <button class="tab tool" type="button" data-act="picker" style="--i:2" data-tip="屏蔽页面元素" aria-label="屏蔽页面元素">${ICONS.picker}</button>
-<button class="tab tool" type="button" data-act="dark" style="--i:3" role="switch"></button>
-<button class="tab hide" type="button" data-act="site" style="--i:4" data-tip="本站隐藏这列按钮\n可在弹窗里恢复" aria-label="本站隐藏">${ICONS.close}</button>`;
+${SNIFF_TOOL_HTML}
+<button class="tab tool" type="button" data-act="dark" style="--i:4" role="switch"></button>
+<button class="tab hide" type="button" data-act="site" style="--i:5" data-tip="本站隐藏这列按钮\n可在弹窗里恢复" aria-label="本站隐藏">${ICONS.close}</button>`;
