@@ -44,6 +44,10 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/enhance/reader.ts')], outfile: join(dist, 'enhance-reader.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/enhance/picker.ts')], outfile: join(dist, 'enhance-picker.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/enhance/popup.ts')], outfile: join(dist, 'enhance-popup.js'), format: 'iife' }),
+  // Markdown 文件：检测脚本很小、每个页面都跑；渲染器（markdown-it、highlight.js、CodeMirror）只在 .md 页面由后台注入
+  build({ ...common, entryPoints: [join(root, 'src/markdown/detect.ts')], outfile: join(dist, 'markdown-detect.js'), format: 'iife', sourcemap: false }),
+  build({ ...common, entryPoints: [join(root, 'src/markdown/app.ts')], outfile: join(dist, 'markdown.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/markdown/options.ts')], outfile: join(dist, 'markdown-options.js'), format: 'iife' }),
 ]);
 
 // 检查更新（src/update/）：弹窗入口和设置页卡片
