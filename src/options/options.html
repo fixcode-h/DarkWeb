@@ -5,6 +5,7 @@
   <title>Drak 设置</title>
   <link rel="stylesheet" href="ui.css" />
   <link rel="stylesheet" href="update.css" />
+  <link rel="stylesheet" href="sniff.css" />
 </head>
 <body class="options">
   <header class="page-head">
@@ -75,6 +76,8 @@
     </details>
   </section>
 
+  <section class="card" id="ghaccel"><h2>GitHub 加速下载</h2></section>
+
   <div class="grid">
     <section class="card">
       <h2>备份与恢复</h2>
@@ -93,8 +96,12 @@
       <div class="actions"><button id="clearCache" type="button">清空缓存</button><span id="cacheMsg" class="hint"></span></div>
     </section>
   </div>
+  <section class="card sniff" id="sniff"><h2>资源嗅探</h2></section>
+
   <section class="card" id="update"><h2>版本与更新</h2></section>
   <script src="options.js"></script>
+  <script src="ghaccel-options.js"></script>
   <script src="update-options.js"></script>
+  <script src="sniff-options.js"></script>
 </body>
 </html>

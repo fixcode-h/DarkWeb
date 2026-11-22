@@ -6,7 +6,10 @@ import type { AnalyzeResponse, FetchCssResponse, InvertResponse, Request } from 
 import { fetchCssText, fetchWithLimit } from '../shared/css-fetch';
 import '../translate/background';
 import '../enhance/background';
+import '../markdown/background';
 import '../update/background';
+import '../ghaccel/background';
+import '../sniff/background';
 import {
   CACHE_PREFIX,
   DEFAULT_SETTINGS,
@@ -41,7 +44,9 @@ function excludeFor(s: Settings): string[] {
 async function registerScripts(): Promise<void> {
   const s = await getSettings();
   const existing = await chrome.scripting.getRegisteredContentScripts();
-  if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: existing.map((x) => x.id) });
+  // 只清自己的两个脚本；资源嗅探（src/sniff/background.ts）的脚本由它自己管理
+  const mine = existing.filter((x) => x.id === 'drak-probe' || x.id === 'drak-main');
+  if (mine.length) await chrome.scripting.unregisterContentScripts({ ids: mine.map((x) => x.id) });
   armScheduleAlarm(s);
   // 定时启用的时段之外不注册：页面加载时完全不注入，也就不会先暗一下再变回来
   if (!s.enabled || !scheduleActive(s)) return;

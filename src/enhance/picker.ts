@@ -58,6 +58,8 @@ class Picker implements PickerApi {
   /** 选中后用“扩大”走过的路径，用于“缩小”退回 */
   private trail: Element[] = [];
   private locked = false;
+  /** tag 里显示的是哪个元素的选择器（滚动时不重算） */
+  private tagFor: Element | null = null;
   /** 本站已隐藏的规则数 */
   private count = 0;
   private readonly site = siteKeyOf(location.host);
@@ -177,7 +179,10 @@ class Picker implements PickerApi {
     }
     const r = el.getBoundingClientRect();
     Object.assign(this.box.style, { display: 'block', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
-    this.tag.textContent = selectorFor(el);
+    if (this.tagFor !== el) {
+      this.tagFor = el;
+      this.tag.textContent = selectorFor(el);
+    }
     Object.assign(this.tag.style, { display: 'block', left: `${Math.max(4, r.left)}px`, top: `${r.top > 24 ? r.top - 22 : r.bottom + 4}px` });
   }
 

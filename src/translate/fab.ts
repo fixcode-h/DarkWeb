@@ -3,7 +3,7 @@
  *
  * 贴在屏幕右边缘的半个标签，鼠标移上去整个滑出；点一下翻译，再点一下显示原文；
  * 按住可以上下拖动（始终吸附在右边缘）。
- * 下面跟一列同样贴边的小按钮，点了直接生效：阅读模式、屏蔽页面元素、本站暗色开关；鼠标移到这一列上时全部滑出，
+ * 下面跟一列同样贴边的小按钮，点了直接生效：阅读模式、屏蔽页面元素、资源嗅探（开启该功能后才显示）、本站暗色开关；鼠标移到这一列上时全部滑出，
  * 最后出现一个“本站隐藏”。只放常用的、一次一用的功能：字体排版、护眼滤镜、自定义 CSS 这类设一次就不动的留在设置页。
  * 按钮放在封闭的 Shadow DOM 里，页面样式和暗色配色都碰不到它。
  */
@@ -21,6 +21,7 @@ import {
 } from './settings';
 import { SETTINGS_KEY, normalizeSettings, siteModeFor, type Settings } from '../shared/settings';
 import { CSS, ICONS, TOOLS_HTML } from './fab-style';
+import { SNIFF_CSS, SniffTool } from '../sniff/fab-panel';
 
 const DRAG_THRESHOLD = 5;
 
@@ -36,9 +37,19 @@ class Fab {
   /** 暗色模式设置，用来显示“本站暗色”开关的状态 */
   private dark: Settings | null = null;
   private closeTimer = 0;
+  /** 资源面板开着时整列不收起 */
+  private pinned = false;
+  private readonly sniff = new SniffTool(
+    () => {},
+    (on) => {
+      this.pinned = on;
+      this.open(on || this.hover);
+    },
+  );
 
   async init(): Promise<void> {
     this.settings = await loadTranslate();
+    await this.sniff.init().catch(() => {});
     this.dark = normalizeSettings((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
     // 页面里可能已经有翻译脚本（自动翻译的站点、扩展重载）
     const tr = (window as unknown as { __drakTranslate?: { status(): PageStatus } }).__drakTranslate;
@@ -89,7 +100,7 @@ class Fab {
     host.className = 'notranslate';
     host.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483646';
     const root = host.attachShadow({ mode: 'closed' });
-    root.innerHTML = `<style>${CSS}</style>
+    root.innerHTML = `<style>${CSS}${SNIFF_CSS}</style>
       <div class="wrap" part="wrap">
         <button class="tab btn" type="button" aria-label="翻译此页面"><span class="ring"></span><span class="label">译</span></button>
         ${TOOLS_HTML}
@@ -99,6 +110,7 @@ class Fab {
     this.host = host;
 
     this.root = root;
+    this.sniff.mount(this.wrap);
     // 鼠标在这一列按钮上就全部滑出；键盘用 Tab 走进来时也滑出，焦点离开整列才收起。
     // 鼠标点过按钮后焦点会留在按钮上（不是 :focus-visible），这时只看鼠标，否则移开后收不回去
     this.wrap.addEventListener('pointerenter', () => {
@@ -107,11 +119,11 @@ class Fab {
     });
     this.wrap.addEventListener('pointerleave', () => {
       this.hover = false;
-      if (!this.wrap.querySelector(':focus-visible')) this.open(false);
+      if (!this.pinned && !this.wrap.querySelector(':focus-visible')) this.open(false);
     });
     this.wrap.addEventListener('focusin', () => this.open(true));
     this.wrap.addEventListener('focusout', (e) => {
-      if (!this.hover && !this.wrap.contains(e.relatedTarget as Node | null)) this.open(false);
+      if (!this.hover && !this.pinned && !this.wrap.contains(e.relatedTarget as Node | null)) this.open(false);
     });
     this.btn.addEventListener('pointerdown', (e) => this.drag(e));
     this.btn.addEventListener('keydown', (e) => {
@@ -128,13 +140,15 @@ class Fab {
         // 阅读模式盖住整页、点选屏蔽要点页面元素：先把按钮收回去
         this.close();
         void chrome.runtime.sendMessage({ type: 'enh:run', tool: act }).catch(() => {});
-      } else if (act === 'dark') void chrome.runtime.sendMessage({ type: 'fab:toggle-dark' }).catch(() => {});
+      } else if (act === 'sniff') void this.sniff.click();
+      else if (act === 'dark') void chrome.runtime.sendMessage({ type: 'fab:toggle-dark' }).catch(() => {});
       else if (act === 'site') void this.save({ hiddenSites: [...this.settings.fab.hiddenSites.filter((s) => s !== this.site), this.site] });
     });
   }
 
   private close(): void {
     clearTimeout(this.closeTimer);
+    this.sniff.closePanel();
     this.wrap.classList.remove('open');
     (this.root.activeElement as HTMLElement | null)?.blur();
   }

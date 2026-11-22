@@ -36,6 +36,26 @@ ${Array.from({ length: 8 }, (_, i) => para(i + 1)).join('')}
 <img src="/x.png" onerror="window.__pwned = 1" alt="pic">
 </article><footer>Footer text</footer></body></html>`;
 
+// 仿知乎侧栏：卡片和广告都是异步插进来的，类名是构建工具生成的哈希名，每次加载卡片数量和顺序都不一样
+let feedLoads = 0;
+const feedPage = (n) => {
+  const card = (cls, body) => `<div class="Card ${cls}" style="margin:8px;padding:8px;border:1px solid #ccc">${body}</div>`;
+  const hot = card('css-hot8x2', '<b>热搜</b><div class="css-li4k2m">再见老板真的要来了</div><div class="css-li4k2m">第二条</div>');
+  const ad = card('css-ad1x9q', '<div class="css-k2m3n4" id="adInner" style="height:80px">豆包大模型 约800万tokens40元 <span class="css-tag7q">广告</span></div><button class="css-close3">×</button>');
+  const follow = card('css-fo5w7e', '<b>推荐关注</b>');
+  const extra = card('css-rt2b6c', '<b>热门圆桌</b>');
+  const later = n % 2 ? [extra, hot, follow, ad] : [hot, ad, follow];
+  return `<!doctype html><html><head><meta charset="utf-8"><title>feed</title></head><body>
+<div id="root"><div><main class="App-main" style="display:flex"><div class="css-m1a2in" style="flex:1"><p id="post">正文内容</p></div>
+<div class="css-s1d3ba" id="sideCol" style="width:320px"></div></main></div></div>
+<script>
+const parts = ${JSON.stringify(later)};
+// 第一块马上到，其余的陆续插到最前面或最后面
+document.getElementById('sideCol').insertAdjacentHTML('beforeend', parts[0]);
+parts.slice(1).forEach((h, i) => setTimeout(() => document.getElementById('sideCol').insertAdjacentHTML(i % 2 ? 'afterbegin' : 'beforeend', h), 150 * (i + 1)));
+</script></body></html>`;
+};
+
 let lastTo = '';
 function startServer() {
   return new Promise((done) => {
@@ -61,7 +81,7 @@ function startServer() {
         return res.end();
       }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(req.url === '/article' ? ARTICLE : PAGE);
+      res.end(req.url === '/article' ? ARTICLE : req.url === '/feed' ? feedPage(feedLoads++) : PAGE);
     });
     server.listen(0, '127.0.0.1', () => done({ server, port: server.address().port }));
   });
@@ -291,6 +311,40 @@ async function main() {
     check('自定义 CSS：按站点生效', true);
     check('屏蔽：坏选择器被丢弃，不会跳出规则', await art.evaluate(() => getComputedStyle(document.querySelector('article')).display !== 'none'));
     await art.close();
+
+    // ---- 屏蔽异步插入的广告：刷新后卡片顺序变了也要继续隐藏 ----
+    await set('enhance', { siteCss: {}, hideRules: {} });
+    const feed = await ctx.newPage();
+    await feed.goto(`${base}/feed`);
+    await feed.bringToFront();
+    await feed.waitForSelector('#adInner');
+    await feed.waitForTimeout(400);
+    await tool('enhance-picker.js');
+    await feed.waitForSelector('[data-drak-picker]', { state: 'attached' });
+    const inner = await feed.locator('#adInner').boundingBox();
+    await feed.mouse.move(inner.x + 5, inner.y + 5);
+    await feed.mouse.click(inner.x + 5, inner.y + 5);
+    // 点中的是广告里面一层，扩大到整张卡片
+    await feed.evaluate(() => document.querySelector('[data-drak-picker]').shadowRoot.querySelector('[data-act="up"]').click());
+    await feed.keyboard.press('Enter');
+    const adCard = () => feed.evaluate(() => { const c = document.getElementById('adInner')?.closest('.Card'); return c ? getComputedStyle(c).display : 'missing'; });
+    await feed.waitForFunction(() => getComputedStyle(document.getElementById('adInner').closest('.Card')).display === 'none');
+    const feedRules = (await sw.evaluate(async () => (await chrome.storage.local.get('enhance')).enhance.hideRules))[key] ?? [];
+    check('屏蔽广告：规则不依赖卡片位置', feedRules.length === 1 && !/nth-/.test(feedRules[0]), JSON.stringify(feedRules));
+    await feed.keyboard.press('Escape');
+    for (let i = 0; i < 2; i++) {
+      await feed.reload();
+      await feed.waitForSelector('#adInner', { state: 'attached' });
+      await feed.waitForTimeout(800);
+      const shown = await feed.evaluate(() => [...document.querySelectorAll('#sideCol > .Card')].filter((c) => getComputedStyle(c).display !== 'none').length);
+      const total = await feed.evaluate(() => document.querySelectorAll('#sideCol > .Card').length);
+      check(`屏蔽广告：第 ${i + 1} 次刷新后仍隐藏、其他卡片不受影响`, (await adCard()) === 'none' && shown === total - 1, `${await adCard()} ${shown}/${total}`);
+    }
+    // 页面把 <html> 下挂的样式删掉，要能补回来
+    await feed.evaluate(() => document.getElementById('drak-enhance-rules')?.remove());
+    await feed.waitForTimeout(100);
+    check('屏蔽广告：样式被页面删掉后自动补回', (await adCard()) === 'none');
+    await feed.close();
 
     // ---- YouTube 双语字幕（本地仿真播放器 DOM）----
     const YT = `<!doctype html><html><head><meta charset="utf-8"></head><body>
