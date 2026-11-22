@@ -10,6 +10,7 @@ import {
   type SiteMode,
 } from '../shared/settings';
 import { mountAppearance, type AppearanceControls } from '../ui/appearance';
+import { mountOverlayScrollbar } from '../ui/scrollbar';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -163,6 +164,7 @@ async function main(): Promise<void> {
   tabId = tab?.id;
   host = tab?.url && /^https?:/.test(tab.url) ? siteKeyOf(tab.url) : '';
   $('host').textContent = host || '此页面不支持';
+  $('host').closest('.card')?.classList.toggle('unsupported', !host);
   appearance = mountAppearance($('appearance'), settings, (patch) => void save(patch));
   render();
 
@@ -215,4 +217,5 @@ async function main(): Promise<void> {
   refreshDiag();
 }
 
+mountOverlayScrollbar({ top: document.querySelector<HTMLElement>('body.popup > header'), bottom: document.querySelector<HTMLElement>('body.popup > footer') });
 main();
