@@ -11,7 +11,7 @@
     "store:assets": "node scripts/build.mjs && node scripts/store-assets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "node scripts/build.mjs --store && node test/e2e/run.mjs && node test/e2e/translate.mjs && node test/e2e/enhance.mjs && node test/e2e/markdown.mjs && node test/e2e/update.mjs && node test/e2e/ghaccel.mjs",
+    "test:e2e": "node scripts/build.mjs --store && node test/e2e/run.mjs && node test/e2e/translate.mjs && node test/e2e/enhance.mjs && node test/e2e/markdown.mjs && node test/e2e/update.mjs && node test/e2e/ghaccel.mjs && node test/e2e/sniff.mjs",
     "check": "npm run typecheck && npm run test && npm run test:e2e"
   },
   "devDependencies": {
@@ -30,6 +30,7 @@
     "highlight.js": "^11.12.0",
     "markdown-it": "^14.3.3",
     "markdown-it-footnote": "^4.0.0",
+    "mux.js": "^6.3.0",
     "playwright": "1.63.0",
     "typescript": "5.7.3",
     "vitest": "2.1.9"

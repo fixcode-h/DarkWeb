@@ -31,6 +31,7 @@ npm run test:e2e     # 构建后在本地仿真的知乎 / B 站页面上跑端�
 | `src/ghaccel/` | GitHub 加速下载：github.com 页面注入“⚡ 加速”、链接改写、节点探测与测速、弹窗卡片与设置页卡片 |
 | `src/markdown/` | Markdown 文件：识别 .md 源文件页（`match.ts`、`detect.ts`）、渲染（markdown-it + highlight.js）、编辑器（CodeMirror 6）、保存与草稿、设置 |
 | `src/translate/` | 网页翻译：引擎（Google / 微软 / DeepL / AI 大模型）、后台调度、页面渲染、弹窗一栏与翻译设置页 |
+| `src/sniff/` | 资源嗅探：按需监听媒体请求、m3u8 / mpd 解析、分片下载与 AES-128 解密、TS 转 MP4、分片 MP4 音视频合并（离屏文档）、侧边“嗅探”按钮、视频悬浮按钮、弹窗资源卡片和设置；`bili/` 是 B 站适配器 |
 | `src/update/` | 检查更新：从 GitHub Releases 取新版本和改动列表、弹窗提示、设置页“版本与更新” |
 | `src/popup/`、`src/options/`、`src/ui/` | 弹窗、设置页、两者共用的外观控件 |
 | `test/unit/`、`test/e2e/` | 单元测试；端到端验收（本地仿真页面；`translate.mjs` 用本地假引擎验收翻译，`enhance.mjs` 验收阅读增强，`markdown.mjs` 验收 Markdown 渲染与编辑） |
@@ -56,6 +57,19 @@ npm run test:e2e     # 构建后在本地仿真的知乎 / B 站页面上跑端�
 - 显示方式：双语对照（原文下方显示译文，默认）或仅显示译文；链接、加粗等行内格式保留，代码不翻译
 - 只翻译视口附近的内容，滚动和页面新增内容自动跟进；已是目标语言的段落跳过
 - “总是翻译此网站”按域名或 IP:端口识别，对该站点所有页面生效
+
+## 资源嗅探
+
+- 默认关闭。在弹窗或设置页开启后，页面右侧快捷按钮列里多一个“嗅探”（下载图标）按钮；**点了才开始**监听当前标签页，同时补抓点之前已加载的媒体。再点打开资源列表，可以直接下载；弹窗里有同样的“资源”卡片和“任务”进度
+- 支持直链文件、HLS（m3u8，含 AES-128 加密和 fMP4 分片）、DASH（mpd）；TS 分片转成 MP4，分开的音视频合并成一个 MP4，只换封装不重新编码
+- DRM 加密内容一律不下载；直播流暂不支持；WebM 格式的音视频（VP9 + Opus）用自写的 WebM 合并器合成一个文件（`src/sniff/webm.ts`），不需要 ffmpeg.wasm
+- B 站适配（默认开）：在视频和番剧页面点“嗅探”后，直接列出清晰度（跟随当前账号本来能看的，拿不到的标“需登录 / 需大会员”）、分 P / 选集，下载后自动合并音视频；还能存封面、CC 字幕（转 SRT）和弹幕 XML。接口在页面里调用（WBI 签名），带的是页面自己的来源和登录状态。B 站 CDN 不接受不带 Range 的整文件请求，所以大文件按 4 MB 分段并发下载，失败时换备用地址
+- 视频上的悬浮下载按钮（默认关）：鼠标停在够大的视频上时右上角出现“下载”，点了开始嗅探并打开资源面板
+- 商店版不对 YouTube 嗅探（应用商店政策）
+- 边播边录（只在完整版，即 GitHub Release 的普通包）：找不到可下载地址时，点“开始录制”会在该网站注册 document_start 脚本并刷新页面，页面端钩住 `MediaSource.addSourceBuffer` / `SourceBuffer.appendBuffer`，把播放器收到的数据复制一份；停止时在页面里合并（WebM 或分片 MP4）并保存，录完撤掉脚本注册。检测到 `encrypted` 事件（DRM）立即作废。YouTube 也靠它（设置里的 YouTube 开关，默认关）
+- 商店版构建（`--store` / `--zip`）用 `minifySyntax` 剔除 `__DRAK_STORE__` 分支，删掉录制脚本，并检查商店目录里没有录制和 YouTube 下载相关的标记，查到就出包失败（`scripts/build.mjs` 的 `checkStoreDir`）
+- B 站真实站点验收：`npm run build && node test/live/sniff-bili.mjs`（未登录下载 360P 并用 ffprobe 检查有音视频）
+- 测试用的小媒体文件在 `test/fixtures/media/`，用其中的 `make.sh` 重新生成
 
 ## 阅读增强
 
