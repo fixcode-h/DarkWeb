@@ -132,9 +132,11 @@ export class SniffTool {
     this.panel.addEventListener('click', (e) => e.stopPropagation());
     wrap.append(this.panel);
     document.addEventListener('keydown', (e) => e.key === 'Escape' && this.closePanel());
+    // 点到页面其他地方就收起。按钮列在封闭的 Shadow DOM 里，从 document 上看 composedPath 只到宿主元素为止，
+    // 看不到里面的 wrap，所以要和宿主比（以前和 wrap 比，在面板里一按下就收起，下拉框打不开）
+    const host = (wrap.getRootNode() as ShadowRoot).host ?? wrap;
     document.addEventListener('pointerdown', (e) => {
-      // 点到页面其他地方就收起（Shadow DOM 里的点击 target 是宿主元素）
-      if (!this.panel.hidden && !e.composedPath().includes(wrap)) this.closePanel();
+      if (!this.panel.hidden && !e.composedPath().includes(host)) this.closePanel();
     });
     this.render();
   }
@@ -193,6 +195,17 @@ export class SniffTool {
   }
 
   private async fill(): Promise<void> {
+    // 下拉框开着（有焦点）时不重画，否则正在选的下拉框会被换掉；选完或移开焦点后再补一次
+    const focused = (this.panel.getRootNode() as ShadowRoot).activeElement;
+    if (focused instanceof HTMLSelectElement && this.panel.contains(focused)) {
+      if (!focused.dataset.later) {
+        focused.dataset.later = '1';
+        const again = () => void this.fill();
+        focused.addEventListener('change', again, { once: true });
+        focused.addEventListener('blur', again, { once: true });
+      }
+      return;
+    }
     const s = (await chrome.runtime.sendMessage({ type: 'sniff:state' }).catch(() => null)) as SniffState | null;
     if (!s) return;
     const head = el('div', 'p-head');
