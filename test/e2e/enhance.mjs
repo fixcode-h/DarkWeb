@@ -57,6 +57,7 @@ parts.slice(1).forEach((h, i) => setTimeout(() => document.getElementById('sideC
 };
 
 let lastTo = '';
+let translateDelay = 0;
 function startServer() {
   return new Promise((done) => {
     const server = createServer((req, res) => {
@@ -67,8 +68,10 @@ function startServer() {
           const msgs = JSON.parse(body).messages;
           lastTo = /into (.+?)\./.exec(msgs[0].content)?.[1] ?? '';
           const items = JSON.parse(msgs[1].content);
-          res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(items.map((t) => `【译:${t}】`)) } }] }));
+          setTimeout(() => {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(items.map((t) => `【译:${t}】`)) } }] }));
+          }, translateDelay);
         });
         return;
       }
@@ -369,6 +372,24 @@ async function main() {
     await yt.evaluate(() => (document.querySelector('.ytp-caption-segment').textContent = 'Next line of speech'));
     await yt.waitForFunction(() => document.querySelector('.drak-sub')?.textContent === '【译:Next line of speech】');
     check('字幕：字幕变化后译文跟着更新', true);
+    // 自动生成字幕一个词一个词往外滚，比翻译回来得快：滚动期间也要看到译文
+    translateDelay = 700;
+    const seen = await yt.evaluate(async () => {
+      const seg = document.querySelector('.ytp-caption-segment');
+      const words = 'We had an amazing time it was a very historic moment for both of our countries and people'.split(' ');
+      const subs = new Set();
+      for (let i = 1; i <= words.length; i++) {
+        seg.textContent = words.slice(0, i).join(' ');
+        await new Promise((r) => setTimeout(r, 300));
+        const t = document.querySelector('.drak-sub')?.textContent;
+        if (t) subs.add(t);
+      }
+      return [...subs];
+    });
+    translateDelay = 0;
+    check('字幕：逐词滚动的自动字幕也能边滚边显示译文', seen.filter((t) => t.startsWith('【译:We had')).length >= 2, JSON.stringify(seen));
+    await yt.waitForFunction(() => document.querySelector('.drak-sub')?.textContent === '【译:We had an amazing time it was a very historic moment for both of our countries and people】');
+    check('字幕：滚动停下后译文追上最新整句', true);
     await yt.click('.drak-sub-btn');
     await yt.waitForSelector('.drak-sub', { state: 'detached' });
     check('字幕：再点一次关闭', true);
