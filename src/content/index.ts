@@ -27,6 +27,7 @@ import { InlineStyler } from './inline';
 import { MediaAnalyzer, mediaCss } from './media';
 import { ensureNativeCookie, readCookie, restoreNativeCookie } from './native-cookie';
 import { RootSheets, wrapScreen } from './sheets';
+import { isMarkdownDocument, MD_ATTR } from '../markdown/match';
 
 type Mode = 'off' | 'dynamic' | 'native' | 'filter';
 
@@ -48,6 +49,8 @@ const host = location.hostname;
 /** 带端口的主机，用来查“本站模式”（按域名 / IP:端口区分） */
 const site = location.host;
 const isTop = window === window.top;
+/** 浏览器直接显示的 .md 源文件：Markdown 渲染器可能接管，先让位（见 waitMarkdown） */
+const mdDoc = isTop && isMarkdownDocument(location.href, document.contentType);
 const ATTR_FILTER = ['style', 'fill', 'stroke', 'stop-color', 'bgcolor', 'color', 'src', 'srcset', 'media', 'disabled', 'rel'];
 const CACHE_LIMIT = 1_500_000;
 /** 本次加载请求时带的 cookie：按 cookie 渲染主题的站点（知乎），页面是不是原生暗色由它决定，之后改 cookie 要刷新才生效 */
@@ -821,6 +824,11 @@ class Drak {
     if (siteMode === 'off') return this.turnOff('site-disabled');
     if (s.followSystem && !this.mql.matches) return this.turnOff('system-light');
     if (!scheduleActive(s)) return this.turnOff('scheduled-off');
+    if (mdDoc && !this.mdReleased) {
+      this.turnOff('markdown');
+      this.waitMarkdown();
+      return;
+    }
     const rule = this.rule();
     const mode: Mode = siteMode !== 'auto' ? siteMode : rule.mode || 'dynamic';
     if (mode === 'off') return this.turnOff('rule-off');
@@ -1040,6 +1048,33 @@ class Drak {
     this.stopNative();
     html.removeAttribute('data-drak-mode');
     html.removeAttribute('data-drak-ready');
+  }
+
+  private mdReleased = false;
+  private mdWaiting = false;
+
+  /**
+   * .md 源文件页：Markdown 渲染器自己负责配色，引擎不处理；渲染器不接管（设置里关了、不是纯文本页）时
+   * 会把根元素的 data-drak-md 改成 off，这时再按普通页面启动。渲染器一直没动静（没装检测脚本、读设置失败）也兜底启动。
+   */
+  private waitMarkdown(): void {
+    if (this.mdWaiting) return;
+    this.mdWaiting = true;
+    const release = () => {
+      obs.disconnect();
+      clearTimeout(timer);
+      this.mdReleased = true;
+      if (this.mode === 'off' && this.reason === 'markdown') this.restart();
+    };
+    const check = () => {
+      if (html.getAttribute(MD_ATTR) === 'off') release();
+    };
+    const obs = new MutationObserver(check);
+    obs.observe(html, { attributes: true, attributeFilter: [MD_ATTR] });
+    const timer = window.setTimeout(() => {
+      if (!html.hasAttribute(MD_ATTR) || html.getAttribute(MD_ATTR) === 'off') release();
+    }, 3000);
+    check();
   }
 
   restart(): void {
