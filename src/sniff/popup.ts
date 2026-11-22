@@ -6,7 +6,7 @@ import { loadSniff, saveSniff } from './settings';
 import { displayName, fmtSize, tagOf } from './format';
 import type { SniffState } from './background';
 import type { Task } from './jobs';
-import { siteBlock, type SiteAction } from './site-ui';
+import { recordBlock, siteBlock, type SiteAction } from './site-ui';
 
 const slot = document.getElementById('sniffSlot');
 let tabId: number | undefined;
@@ -163,8 +163,15 @@ async function render(): Promise<void> {
       }),
     );
   }
+  const rec = recordBlock(s, async (a: 'start' | 'stop' | 'cancel') => {
+        const msg = a === 'start' ? { type: 'sniff:rec-start' } : { type: 'sniff:rec-stop', cancel: a === 'cancel' };
+        const r = await ask<{ ok: boolean; error?: string }>(msg).catch((e: unknown) => ({ ok: false, error: String(e) }));
+        note = r.ok ? '' : `录制失败：${r.error}`;
+        void render();
+      });
+  if (rec) card.append(rec);
   const list = el('div', 'sn-list');
-  if (!s.items.length && !s.site) list.append(el('p', 'hint sn-empty', s.drm ? '这个页面的播放器使用了 DRM 加密，无法下载。' : '还没有找到。播放一下视频；如果视频早就加载完了，刷新页面再试。'));
+  if (!s.items.length && !s.site && !s.youtube) list.append(el('p', 'hint sn-empty', s.drm ? '这个页面的播放器使用了 DRM 加密，无法下载。' : '还没有找到。播放一下视频；如果视频早就加载完了，刷新页面再试。'));
   for (const it of s.items) {
     const row = el('div', 'sn-row');
     row.title = it.url;

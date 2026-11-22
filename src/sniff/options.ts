@@ -93,6 +93,14 @@ async function render(): Promise<void> {
   const codecField = field('B 站视频编码（AVC 兼容性最好）', codec);
   codecField.classList.toggle('inactive', !s.bili.enabled);
 
+  // 完整版（GitHub 上的普通包）才有 YouTube 和边播边录，商店版不显示
+  const caps = (await chrome.runtime.sendMessage({ type: 'sniff:state' }).catch(() => null)) as { canRecord?: boolean } | null;
+  const full = caps?.canRecord
+    ? [
+        toggle('YouTube', '允许在 YouTube 上嗅探；YouTube 的视频分段加载，用“边播边录”保存。只录播放器加载过的部分，会员和加密内容不行', s.youtube.enabled, (v) => save({ youtube: { enabled: v } })),
+      ]
+    : [];
+
   const warn = el('div', 'sn-warnbox');
   warn.append(el('b', '', '版权提示：'), '请只下载你有权保存的内容，仅供个人离线观看。Drak 不支持也不会尝试下载 DRM 加密、付费会员专享或需要绕过登录的内容。');
 
@@ -109,6 +117,7 @@ async function render(): Promise<void> {
     el('h2', 'sub', '站点适配'),
     bili,
     codecField,
+    ...full,
     warn,
   );
   root.classList.toggle('inactive', !s.enabled);

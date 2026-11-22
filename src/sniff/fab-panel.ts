@@ -5,7 +5,7 @@
 import { SNIFF_KEY, loadSniff, normalizeSniff } from './settings';
 import { displayName, fmtSize, tagOf } from './format';
 import type { SniffState } from './background';
-import { siteBlock, type SiteAction } from './site-ui';
+import { recordBlock, siteBlock, type SiteAction } from './site-ui';
 import { VideoHover } from './hover';
 
 const svg = (body: string) =>
@@ -48,7 +48,7 @@ export const SNIFF_CSS = `
 .p-warn { color: #e49c06; }
 /* 站点适配（B 站）区块 */
 .st { padding: 8px 0 10px; display: flex; flex-direction: column; gap: 6px; }
-.st + .p-row { border-top: 1px solid var(--edge); }
+.st + .p-row, .st + .st { border-top: 1px solid var(--edge); }
 .st-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .st-badge { flex: none; font-size: 10px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--on-accent); }
 .st-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
@@ -213,7 +213,14 @@ export class SniffTool {
         }),
       );
     }
-    if (!s.items.length && !s.site) {
+    const rec = recordBlock(s, async (a: 'start' | 'stop' | 'cancel') => {
+        const msg = a === 'start' ? { type: 'sniff:rec-start' } : { type: 'sniff:rec-stop', cancel: a === 'cancel' };
+        const r = await (chrome.runtime.sendMessage(msg) as Promise<{ ok: boolean; error?: string }>).catch((e: unknown) => ({ ok: false, error: String(e) }));
+        this.note = r.ok ? (a === 'start' ? '页面将刷新，开始播放后就会录制。' : a === 'stop' ? '正在合并，完成后会保存到下载文件夹。' : '') : `录制失败：${r.error ?? '未知错误'}`;
+        void this.fill();
+      });
+    if (rec) list.append(rec);
+    if (!s.items.length && !s.site && !s.youtube) {
       list.append(el('div', 'p-empty', s.drm ? '这个页面的播放器使用了 DRM 加密，无法下载。' : '还没有找到。播放一下视频，资源会出现在这里；如果视频早就加载完了，刷新页面再试。'));
     }
     for (const it of s.items) {

@@ -96,3 +96,53 @@ export function siteBlock(state: SiteState, canDownload: boolean, act: (a: SiteA
   box.append(extras);
   return box;
 }
+
+export interface RecView {
+  canRecord: boolean;
+  /** 说明文字由后台给（商店版后台没有这段代码） */
+  recHint?: string;
+  canDownload: boolean;
+  recording?: { bytes: number; tracks: number; time: number; duration: number };
+}
+
+const clock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+
+/** 边播边录（只在完整版）：开始会刷新页面，从头播放到想要的位置后点“停止并保存” */
+export function recordBlock(s: RecView, act: (a: 'start' | 'stop' | 'cancel') => void): HTMLElement | null {
+  if (!s.canRecord) return null;
+  const box = el('div', 'st rec');
+  const head = el('div', 'st-head');
+  head.append(el('span', 'st-badge', '录制'), el('span', 'st-title', '边播边录'));
+  box.append(head);
+  const r = s.recording;
+  if (!r) {
+    box.append(
+      el(
+        'div',
+        'st-sub',
+        s.recHint ?? '',
+      ),
+    );
+    const row = el('div', 'st-row');
+    const b = el('button', 'st-btn primary', '开始录制');
+    b.type = 'button';
+    b.disabled = !s.canDownload;
+    b.addEventListener('click', () => act('start'));
+    row.append(b);
+    box.append(row);
+    return box;
+  }
+  const pos = r.duration ? `${clock(r.time)} / ${clock(r.duration)}` : clock(r.time);
+  box.append(el('div', 'st-sub', r.bytes ? `正在录制：${pos} · 已录 ${fmtSize(r.bytes)}（${r.tracks} 路）` : '等待播放器开始加载视频…'));
+  const row = el('div', 'st-row');
+  const stop = el('button', 'st-btn primary', '停止并保存');
+  stop.type = 'button';
+  stop.disabled = !r.bytes;
+  stop.addEventListener('click', () => act('stop'));
+  const cancel = el('button', 'st-link', '放弃');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => act('cancel'));
+  row.append(stop, cancel);
+  box.append(row);
+  return box;
+}

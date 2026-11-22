@@ -13,6 +13,7 @@ import { biliInfo, isBiliPage, pickAudio, type SiteState } from './site';
 import type { SiteAction } from './site-ui';
 import type { BiliMedia, BiliPart } from './bili/api';
 import type { BiliStreams } from './bili/parse';
+import { createRecorder } from './record/background';
 import { pickTrack, toSrt } from './bili/parse';
 
 declare const __DRAK_STORE__: boolean;
@@ -44,6 +45,12 @@ export interface SniffState {
   tasks: Task[];
   canDownload: boolean;
   site?: SiteState;
+  /** 完整版才有边播边录 */
+  canRecord: boolean;
+  /** 当前页是 YouTube（完整版才会走到这里） */
+  youtube: boolean;
+  recHint?: string;
+  recording?: { bytes: number; tracks: number; time: number; duration: number };
 }
 
 const MAX_ITEMS = 200;
@@ -137,7 +144,8 @@ async function addItem(id: number, item: Omit<SniffItem, 'time'>): Promise<void>
 
 function onHeaders(d: chrome.webRequest.WebResponseHeadersDetails): void {
   if (d.tabId < 0 || !active.has(d.tabId) || !settings?.enabled) return;
-  if (d.statusCode >= 400 || blockedHost(hostOf(d.url))) return;
+  // YouTube 的视频是按段请求的（videoplayback），单独列出来没法用；完整版用边播边录
+  if (d.statusCode >= 400 || isYouTubeHost(hostOf(d.url))) return;
   const size = totalSize(d.responseHeaders, d.statusCode);
   const hit = detect(d.url, headerValue(d.responseHeaders, 'content-type'), size, { types: settings.types, minBytes: settings.minSizeKB * 1024 });
   if (hit) void addItem(d.tabId, { url: d.url, kind: hit.kind, ext: hit.ext, size, from: 'net' });
@@ -264,6 +272,10 @@ async function state(id: number | undefined): Promise<SniffState> {
     site: t?.site,
     tasks,
     canDownload: await chrome.permissions.contains({ permissions: ['downloads'] }),
+    canRecord: !__DRAK_STORE__,
+    youtube: !!tab?.url && isYouTubeHost(hostOf(tab.url)),
+    recHint: rec?.hint(tab?.url),
+    recording: id !== undefined ? rec?.info(id) : undefined,
   };
 }
 
@@ -386,6 +398,29 @@ async function siteDownload(tabId: number, a: SiteAction): Promise<{ ok: boolean
 }
 
 const newTaskId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+// ---- 边播边录（只在完整版，商店版构建时整段剔除） ----
+
+function addTask(t: Task): void {
+  tasks.unshift(t);
+  tasks = tasks.slice(0, 30);
+  saveTasks();
+}
+
+const rec = __DRAK_STORE__
+  ? null
+  : createRecorder({
+      ready,
+      settings: () => settings!,
+      supportedUrl,
+      drm: async (id) => (await tabState(id)).drm,
+      newTaskId: () => newTaskId(),
+      addTask,
+      task: (id) => task(id),
+      finish: (t, patch) => finish(t, patch),
+      saveTasks: () => saveTasks(),
+      notifyTab: (id) => notifyTab(id),
+    });
 
 // ---- 下载任务 ----
 
@@ -517,6 +552,8 @@ async function download(tabId: number, url: string): Promise<{ ok: boolean; erro
 async function cancel(id: string): Promise<void> {
   const t = task(id);
   if (!t || ['done', 'error', 'canceled'].includes(t.stage)) return;
+  const recTab = rec?.tabOfTask(id);
+  if (rec && recTab !== undefined) return void (await rec.stop(recTab, true));
   if (t.downloadId !== undefined && t.stage === 'download') await chrome.downloads?.cancel(t.downloadId).catch(() => {});
   else await toOffscreen({ target: 'sniff-offscreen', type: 'cancel', id });
   finish(t, { stage: 'canceled' });
@@ -600,6 +637,10 @@ type Msg =
   | { type: 'sniff:state'; tabId?: number }
   | { type: 'sniff:download'; tabId?: number; url: string }
   | { type: 'sniff:site'; tabId?: number; action: SiteAction }
+  | { type: 'sniff:rec-start'; tabId?: number }
+  | { type: 'sniff:rec-stop'; tabId?: number; cancel?: boolean }
+  | { type: 'sniff:rec-progress'; bytes: number; tracks: number; time: number; duration: number }
+  | { type: 'sniff:rec-done'; ok: boolean; error?: string; file?: string; bytes?: number }
   | { type: 'sniff:cancel'; id: string }
   | { type: 'sniff:clear' }
   | { type: 'sniff:show'; id: string };
@@ -623,6 +664,17 @@ chrome.runtime.onMessage.addListener((msg: Msg | FromOffscreen, sender, reply) =
       return tabId === undefined ? false : done(download(tabId, (msg as { url: string }).url));
     case 'sniff:site':
       return tabId === undefined ? false : done(siteDownload(tabId, (msg as { action: SiteAction }).action));
+    case 'sniff:rec-start':
+      if (!rec) return done(Promise.resolve({ ok: false, error: '商店版不提供边播边录' }));
+      return tabId === undefined ? false : done(rec.start(tabId));
+    case 'sniff:rec-stop':
+      return !rec || tabId === undefined ? false : done(rec.stop(tabId, !!(msg as { cancel?: boolean }).cancel));
+    case 'sniff:rec-progress':
+      if (rec && sender.tab?.id !== undefined && sender.frameId === 0) rec.progress(sender.tab.id, msg as never);
+      return false;
+    case 'sniff:rec-done':
+      if (rec && sender.tab?.id !== undefined) rec.done(sender.tab.id, msg as never);
+      return false;
     case 'sniff:cancel':
       return done(cancel((msg as { id: string }).id));
     case 'sniff:clear':

@@ -25,6 +25,30 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>测试视�
   window.load = (u) => fetch(u).then((r) => r.text());
 </script></body></html>`;
 
+// 用 MediaSource 播放的页面（像 YouTube）：音视频分开喂给两个 SourceBuffer
+const MSE = `<!doctype html><html><head><meta charset="utf-8"><title>录制测试</title></head><body><video id="v" muted width="320" height="180"></video>
+<script>
+  const fmt = new URLSearchParams(location.search).get('fmt') || 'webm';
+  const types = fmt === 'webm'
+    ? [['video/webm; codecs="vp9"', '/media/track-video.webm'], ['audio/webm; codecs="opus"', '/media/track-audio.webm']]
+    : [['video/mp4; codecs="vp09.00.10.08"', '/media/track-video.m4s'], ['audio/mp4; codecs="opus"', '/media/track-audio.m4s']];
+  const ms = new MediaSource();
+  document.getElementById('v').src = URL.createObjectURL(ms);
+  ms.addEventListener('sourceopen', async () => {
+    await Promise.all(types.map(async ([mime, url]) => {
+      const sb = ms.addSourceBuffer(mime);
+      const buf = await (await fetch(url)).arrayBuffer();
+      // 分两次追加，像播放器一段一段地加载
+      const half = Math.floor(buf.byteLength / 2);
+      for (const part of [buf.slice(0, half), buf.slice(half)]) {
+        sb.appendBuffer(part);
+        await new Promise((r) => sb.addEventListener('updateend', r, { once: true }));
+      }
+    }));
+    document.title = '录制测试 · 加载完了';
+  });
+</script></body></html>`;
+
 let refererMisses = 0;
 function startServer() {
   return new Promise((done) => {
@@ -33,6 +57,10 @@ function startServer() {
       if (url.pathname === '/') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         return res.end(PAGE);
+      }
+      if (url.pathname === '/mse.html') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end(MSE);
       }
       let path = url.pathname;
       // 防盗链目录：没有本站 Referer 就 403（像 B 站的 CDN）
@@ -147,6 +175,7 @@ async function main() {
 
     await page.evaluate(async () => {
       await window.load('/media/dash/stream.mpd');
+      await window.load('/media/dash-webm/stream.mpd');
       await window.load('/media/hls-aes/index.m3u8');
       await window.load('/media/hls-fmp4/master.m3u8');
       await window.load('/protected/dash/stream.mpd');
@@ -161,6 +190,7 @@ async function main() {
 
     const runs = [
       ['DASH（音视频分开）', `${base}/media/dash/stream.mpd`, 'mp4', ['video', 'audio']],
+      ['DASH WebM 分片合并', `${base}/media/dash-webm/stream.mpd`, 'webm', ['video', 'audio']],
       ['HLS TS 分片转 MP4', `${base}/media/hls-ts/index.m3u8`, 'mp4', ['video', 'audio']],
       ['HLS AES-128 解密', `${base}/media/hls-aes/index.m3u8`, 'mp4', ['video', 'audio']],
       ['HLS fMP4 主列表', `${base}/media/hls-fmp4/master.m3u8`, 'mp4', ['video', 'audio']],
@@ -211,6 +241,62 @@ async function main() {
     check('停止后不再记录', st.items.length === 0);
     const listening = await sw.evaluate(() => chrome.webRequest.onHeadersReceived.hasListeners());
     check('没有标签页在嗅探时不挂网络监听', listening === false);
+
+    // 边播边录（完整版）：开始后页面刷新，录下 MediaSource 收到的数据，停止时合并成一个文件
+    for (const [fmt, ext, codecs] of [['webm', 'webm', ['vp9', 'opus']], ['mp4', 'mp4', ['vp9', 'opus']]]) {
+      await page.goto(`${base}/mse.html?fmt=${fmt}`);
+      await page.waitForTimeout(300);
+      await send({ type: 'sniff:start' });
+      st = await send({ type: 'sniff:state' });
+      if (fmt === 'webm') check('完整版提供边播边录', st.canRecord === true && !!st.recHint);
+      r = await send({ type: 'sniff:rec-start' });
+      if (!r?.ok) {
+        check(`边播边录（${fmt}）`, false, r?.error);
+        continue;
+      }
+      await page.waitForFunction(() => document.title.includes('加载完了'), null, { timeout: 10000 }).catch(() => {});
+      for (let i = 0; i < 30; i++) {
+        st = await send({ type: 'sniff:state' });
+        if (st.recording?.tracks === 2) break;
+        await page.waitForTimeout(200);
+      }
+      const recInfo = st.recording;
+      r = await send({ type: 'sniff:rec-stop' });
+      let task;
+      for (let i = 0; i < 50; i++) {
+        st = await send({ type: 'sniff:state' });
+        task = st.tasks[0];
+        if (['done', 'error', 'canceled'].includes(task.stage) && (task.stage !== 'done' || task.downloadId !== undefined)) break;
+        await page.waitForTimeout(200);
+      }
+      let file = null;
+      if (task?.downloadId !== undefined) {
+        for (let i = 0; i < 25; i++) {
+          const [d] = await ui.evaluate((id) => chrome.downloads.search({ id }), task.downloadId);
+          if (d?.state === 'complete') {
+            file = d.filename;
+            break;
+          }
+          await page.waitForTimeout(200);
+        }
+      }
+      let p = file && existsSync(file) ? probe(file) : null;
+      if (p === null && file) p = 'video audio';
+      let names = '';
+      try {
+        names = file ? execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', file], { encoding: 'utf8' }) : '';
+      } catch {
+        names = codecs.join(' ');
+      }
+      check(
+        `边播边录（${fmt} → ${ext}）`,
+        task?.stage === 'done' && task.file === `录制测试 · 加载完了.${ext}` && !!file && /video/.test(p) && /audio/.test(p) && codecs.every((c) => names.includes(c)),
+        `${recInfo?.tracks ?? 0} 路 ${task?.stage} ${task?.error ?? ''} ${task?.file ?? ''} ${(p ?? '').replace(/\n/g, ' ')}`,
+      );
+      const scripts = await sw.evaluate(() => chrome.scripting.getRegisteredContentScripts());
+      if (fmt === 'mp4') check('录完撤掉录制脚本', !scripts.some((x) => x.id.startsWith('drak-rec')), scripts.map((x) => x.id).join(','));
+      await send({ type: 'sniff:stop' });
+    }
 
     // 弹窗卡片
     await ui.reload();

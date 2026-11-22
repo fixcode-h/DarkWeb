@@ -3,6 +3,7 @@
  * 放在这里而不是 Service Worker 里：Service Worker 会被浏览器随时回收，长任务在这里才稳。
  */
 import { Transmuxer } from 'mux.js/lib/mp4/transmuxer.js';
+import { mergeWebm, isWebm as isWebmHead } from './webm';
 import { parseM3u8, seqIv, type ByteRange, type HlsSegment } from './hls';
 import { parseMpd, type DashTrack } from './dash';
 import { mergeFmp4 } from './mp4';
@@ -258,11 +259,12 @@ async function runDash(job: Job, signal: AbortSignal, p: Progress): Promise<From
   p.set('merge');
   const webm = tracks.map(isWebm);
   if (!webm.some(Boolean)) return save(job, [{ blob: await mergeFmp4(blobs), ext: tracks.length > 1 || video ? 'mp4' : 'm4a' }]);
-  // WebM 的音视频合并要用 ffmpeg.wasm（只在完整版），这里分两个文件保存
+  if (webm.every(Boolean)) return save(job, [{ blob: await mergeWebm(blobs), ext: video ? 'webm' : 'weba' }]);
+  // 一路 WebM 一路 MP4（很少见）：封装不同没法直接合，分两个文件保存
   return save(
     job,
     tracks.map((t, i) => ({ blob: blobs[i], ext: webm[i] ? (t.kind === 'video' ? 'webm' : 'weba') : t.kind === 'video' ? 'mp4' : 'm4a', suffix: tracks.length > 1 ? (t.kind === 'video' ? '（视频）' : '（音频）') : undefined })),
-    tracks.length > 1 ? 'WebM 格式的音视频分成了两个文件保存' : undefined,
+    tracks.length > 1 ? '音视频封装格式不同，分成了两个文件保存' : undefined,
   );
 }
 
@@ -292,6 +294,8 @@ async function runTracks(job: Job, signal: AbortSignal, p: Progress): Promise<Fr
     blobs.push(d);
   }
   p.set('merge');
+  const heads = await Promise.all(blobs.map(async (b) => new Uint8Array(await b.slice(0, 4).arrayBuffer())));
+  if (heads.every(isWebmHead)) return save(job, [{ blob: await mergeWebm(blobs), ext: 'webm' }]);
   return save(job, [{ blob: await mergeFmp4(blobs), ext: 'mp4' }]);
 }
 

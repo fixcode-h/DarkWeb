@@ -137,6 +137,7 @@ export async function mergeFmp4(inputs: Blob[], info?: MergeInfo): Promise<Blob>
   const idMaps: Map<number, Track>[] = [];
   let nextId = 1;
   let order = 0;
+  const seen = new Set<string>();
 
   for (let i = 0; i < inputs.length; i++) {
     const blob = inputs[i];
@@ -188,6 +189,13 @@ export async function mergeFmp4(inputs: Blob[], info?: MergeInfo): Promise<Blob>
           const tr = tfhd ? map.get(u32(moof, tfhd.body + 4)) : undefined;
           if (tfdt) time = (moof[tfdt.body] === 1 ? u64(moof, tfdt.body + 4) : u32(moof, tfdt.body + 4)) / (tr?.timescale ?? 1);
         }
+        // 边播边录时同一个分片可能被追加了两次（拖动进度、切换清晰度），同一轨同一时间只留第一个
+        const key = `${i}|${traf ? u32(moof, (find(moof, ['tfhd'], traf.body, traf.start + traf.size)?.body ?? 0) + 4) : 0}|${time}`;
+        if (Number.isFinite(time) && seen.has(key)) {
+          cur = null;
+          continue;
+        }
+        seen.add(key);
         cur = { input: i, moof, mdats: [], time, order: order++ };
         // 记下原始位置，用来换算 base_data_offset
         (cur as Fragment & { origin: number }).origin = b.start;

@@ -2,7 +2,7 @@
 # 生成资源嗅探测试用的小媒体文件（3 秒，160x90）。改了这里需要重新运行并提交生成的文件。
 set -euo pipefail
 cd "$(dirname "$0")"
-rm -rf dash hls-ts hls-aes hls-fmp4 track-*.m4s sample.webm
+rm -rf dash dash-webm hls-ts hls-aes hls-fmp4 track-*.m4s track-*.webm sample.webm
 SRC=(-f lavfi -i "testsrc2=size=160x90:rate=15:duration=3" -f lavfi -i "sine=frequency=440:duration=3")
 Q=(-hide_banner -loglevel error -y)
 
@@ -14,10 +14,19 @@ FRAG=(-f mp4 -movflags frag_keyframe+empty_moov+default_base_moof -frag_duration
 ffmpeg "${Q[@]}" "${SRC[@]}" -map 0:v -c:v libvpx-vp9 -b:v 60k -g 15 "${FRAG[@]}" track-video.m4s
 ffmpeg "${Q[@]}" "${SRC[@]}" -map 1:a -c:a libopus -b:a 24k "${FRAG[@]}" track-audio.m4s
 
+# WebM 格式的音视频分开（YouTube 的 VP9 + Opus 就是这样）
+ffmpeg "${Q[@]}" "${SRC[@]}" -map 0:v -c:v libvpx-vp9 -b:v 60k -g 15 -cluster_time_limit 1000 track-video.webm
+ffmpeg "${Q[@]}" "${SRC[@]}" -map 1:a -c:a libopus -b:a 24k -cluster_time_limit 1000 track-audio.webm
+
 # DASH：SegmentTemplate + SegmentTimeline，音视频分开
 mkdir dash
 ffmpeg "${Q[@]}" "${SRC[@]}" -map 0:v -map 1:a -c:v libvpx-vp9 -b:v 60k -g 15 -c:a libopus -b:a 24k \
   -f dash -dash_segment_type mp4 -seg_duration 1 -use_template 1 -use_timeline 1 dash/stream.mpd
+
+# DASH：WebM 分片（VP9 + Opus），合并后是一个 WebM
+mkdir dash-webm
+ffmpeg "${Q[@]}" "${SRC[@]}" -map 0:v -map 1:a -c:v libvpx-vp9 -b:v 60k -g 15 -c:a libopus -b:a 24k \
+  -f dash -dash_segment_type webm -seg_duration 1 -use_template 1 -use_timeline 1 dash-webm/stream.mpd
 
 # HLS：TS 分片（H.264 + AAC）
 mkdir hls-ts

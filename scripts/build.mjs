@@ -2,7 +2,7 @@
 // 设置 BUILD_NUMBER 时，manifest 版本号写成 <version>.<BUILD_NUMBER>：Chrome 应用商店要求每次上传的版本号都更大
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
@@ -52,6 +52,9 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/sniff/options.ts')], outfile: join(dist, 'sniff-options.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/sniff/offscreen.ts')], outfile: join(dist, 'sniff-offscreen.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/sniff/bili/entry.ts')], outfile: join(dist, 'sniff-bili.js'), format: 'iife' }),
+  // 边播边录：只在普通包（完整版），商店版目录里删掉
+  build({ ...common, entryPoints: [join(root, 'src/sniff/record/hook.ts')], outfile: join(dist, 'sniff-record-hook.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/sniff/record/recorder.ts')], outfile: join(dist, 'sniff-record.js'), format: 'iife' }),
 ]);
 copyFileSync(join(root, 'src/sniff/sniff.css'), join(dist, 'sniff.css'));
 copyFileSync(join(root, 'src/sniff/offscreen.html'), join(dist, 'sniff-offscreen.html'));
@@ -157,8 +160,9 @@ for (const s of [16, 32, 48, 128]) writeFileSync(join(dist, 'icons', `icon-${s}.
 async function buildStoreDir(target) {
   rmSync(target, { recursive: true, force: true });
   cpSync(dist, target, { recursive: true });
-  await build({ ...common, define: { __DRAK_STORE__: 'true' }, entryPoints: [join(root, 'src/background/sw.ts')], outfile: join(target, 'sw.js'), format: 'esm' });
-  for (const f of ['update-popup.js', 'update-options.js', 'update.css']) rmSync(join(target, f));
+  // minifySyntax：把 __DRAK_STORE__ 为 true 时走不到的分支（检查更新、边播边录）连同它们引用的模块一起剔除
+  await build({ ...common, minifySyntax: true, define: { __DRAK_STORE__: 'true' }, entryPoints: [join(root, 'src/background/sw.ts')], outfile: join(target, 'sw.js'), format: 'esm' });
+  for (const f of ['update-popup.js', 'update-options.js', 'update.css', ...FULL_ONLY]) rmSync(join(target, f));
   // 每个页面要删掉的行数：样式表、挂载点、脚本各一行，对不上说明 HTML 改过，宁可出包失败也不漏删
   const hooks = { 'popup.html': 4, 'options.html': 3 };
   const pattern = /update\.css|id="updateSlot"|id="updateRow"|id="update"|update-(popup|options)\.js/;
@@ -170,6 +174,25 @@ async function buildStoreDir(target) {
   }
   const { key: _key, ...storeManifest } = manifest;
   writeFileSync(join(target, 'manifest.json'), JSON.stringify(storeManifest, null, 2));
+  checkStoreDir(target);
+}
+
+/** 只在完整版里的文件：边播边录（YouTube 也靠它） */
+const FULL_ONLY = ['sniff-record-hook.js', 'sniff-record.js'];
+
+/**
+ * 商店包里不能有 YouTube 下载和边播边录的代码（应用商店政策）。查到就让出包失败。
+ * 后台里“屏蔽 YouTube 域名”的判断会留着（那是禁止嗅探用的），所以只查这些只有下载 / 录制才会用到的标记
+ */
+function checkStoreDir(target) {
+  const banned = [/sniff-record/, /drak-rec/, /ytInitialPlayerResponse/, /__drakRec/, /createRecorder/];
+  const scripts = readdirSync(target).filter((f) => f.endsWith('.js'));
+  for (const f of FULL_ONLY) if (existsSync(join(target, f))) throw new Error(`商店包里不应有 ${f}`);
+  for (const f of scripts) {
+    const text = readFileSync(join(target, f), 'utf8');
+    const hit = banned.find((re) => re.test(text));
+    if (hit) throw new Error(`商店包的 ${f} 里有只属于完整版的代码：${hit}`);
+  }
 }
 
 if (zip) {
