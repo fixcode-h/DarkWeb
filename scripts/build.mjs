@@ -44,6 +44,9 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/enhance/reader.ts')], outfile: join(dist, 'enhance-reader.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/enhance/picker.ts')], outfile: join(dist, 'enhance-picker.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/enhance/popup.ts')], outfile: join(dist, 'enhance-popup.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/ghaccel/content.ts')], outfile: join(dist, 'ghaccel.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/ghaccel/popup.ts')], outfile: join(dist, 'ghaccel-popup.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/ghaccel/options.ts')], outfile: join(dist, 'ghaccel-options.js'), format: 'iife' }),
 ]);
 
 // 检查更新（src/update/）：弹窗入口和设置页卡片

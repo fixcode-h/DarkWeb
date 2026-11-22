@@ -1,12 +1,12 @@
 # Drak 暗色模式隐私政策
 
-最后更新：2026-11-14
+最后更新：2026-11-22
 
 Drak 暗色模式（下称“本扩展”）是一个把网页重新配色为暗色的浏览器扩展，也提供可选的网页翻译功能。
 
 ## 我们不收集任何数据
 
-本扩展没有服务器，不收集、不出售你的个人信息、浏览记录或网页内容。本扩展不含统计、广告或跟踪代码，也不加载远程代码。唯一会把内容发出设备的是你主动使用的网页翻译，见下一节；另外非商店安装的版本会向 GitHub 查询有没有新版本，见“检查更新”一节。
+本扩展没有服务器，不收集、不出售你的个人信息、浏览记录或网页内容。本扩展不含统计、广告或跟踪代码，也不加载远程代码。唯一会把内容发出设备的是你主动使用的网页翻译，见下一节；你在 GitHub 上点“⚡ 加速”下载时，下载地址会经过你选的加速节点，见“GitHub 加速下载”一节；另外非商店安装的版本会向 GitHub 查询有没有新版本，见“检查更新”一节。
 
 ## 网页翻译
 
@@ -22,6 +22,14 @@ Drak 暗色模式（下称“本扩展”）是一个把网页重新配色为暗
 - **缓存**：译文只在浏览器运行期间缓存在内存里，不写入磁盘。
 
 不使用翻译功能时，本扩展不会向任何翻译服务发送任何内容。
+
+## GitHub 加速下载
+
+在 github.com 上，本扩展会在源码 ZIP、Release 附件、Raw 文件和 clone 地址旁加一个“⚡ 加速”按钮（也可以在设置里改成直接替换原下载链接，或整个关闭）。
+
+- **什么时候发请求**：只在你点“⚡ 加速”、“复制加速 clone 地址”或在设置页点“测速”时。只是打开 GitHub 页面不会访问任何节点。
+- **发送什么**：你要下载的那个文件的公开 GitHub 地址（例如 `https://github.com/owner/repo/releases/download/v1.0/app.zip`）拼在节点地址后面，由浏览器直接去下载。不发送 GitHub 的 Cookie、登录状态或任何设置；带 `token` 等查询参数的链接不加速；私有仓库默认不显示加速按钮。开启“节点不可用时自动回退”时，点击前会先向节点地址发一个不带内容的 HEAD 请求，判断它是否在线。测速时经每个节点下载一个公开的小文件（GitHub 上 `github/gitignore` 仓库的 README）并记录耗时，结果只存在本机。
+- **发给谁**：你在设置里选的节点。默认是 `v6.gh-proxy.org`，内置可选 `gh-proxy.org`、`cdn.gh-proxy.org`、`edgeone.gh-proxy.org`，也可以填自建的地址。这些节点由第三方运营，按它们自己的政策处理请求；它们能看到你下载了哪个文件，并负责转发文件内容。下载可执行文件后，建议对照 Release 页面上的 sha256 校验。
 
 ## 检查更新
 
@@ -45,6 +53,7 @@ Drak 暗色模式（下称“本扩展”）是一个把网页重新配色为暗
 - **脚本（scripting）**：按你的设置把配色脚本注入网页，并在你关闭某个网站时不再注入。
 - **定时器（alarms）**：在你设定的时间段自动开关暗色模式。
 - **右键菜单（contextMenus）**：在页面右键菜单里加入“翻译此页面 / 显示原文”。
+- GitHub 加速下载没有新增权限：按钮只在 github.com 上显示，探测和测速使用已有的网站访问权限。
 
 ## 变更
 
@@ -58,13 +67,15 @@ Drak 暗色模式（下称“本扩展”）是一个把网页重新配色为暗
 
 # Privacy Policy for Drak Dark Mode
 
-Last updated: 2026-11-11
+Last updated: 2026-11-22
 
 Drak Dark Mode ("the extension") recolors web pages into a dark theme and offers optional page translation.
 
 **The extension does not collect or sell any personal data, browsing history or page content.** It has no backend server, contains no analytics, advertising or tracking code, and loads no remote code. The only content that leaves your device is page text you explicitly ask to translate.
 
 **Page translation** runs only when you click "Translate this page", use the shortcut or context menu, or add a site to "Always translate". The visible text near the viewport (with link and emphasis markup) and the target language are sent only to the translation service you select: Google Translate (`translate.googleapis.com`, default), Microsoft Translator (`edge.microsoft.com`, `api-edge.cognitive.microsofttranslator.com`), DeepL (`api.deepl.com` / `api-free.deepl.com`), or an AI model endpoint you configure. If the selected engine fails, the other of Google or Microsoft may be used as a fallback (can be turned off). URLs, cookies, form inputs and editable areas are not sent. API keys you enter are stored only in `chrome.storage.local` and sent only to the matching service. Translations are cached in memory only.
+
+**GitHub download acceleration**: on github.com the extension adds a "⚡ 加速" (accelerate) button next to source ZIPs, release assets, raw files and the clone URL (it can instead rewrite the original links, or be turned off). Only when you click it, copy the accelerated clone URL, or run a speed test in settings, the public GitHub URL of that file is prefixed with the node you chose (default `v6.gh-proxy.org`; also `gh-proxy.org`, `cdn.gh-proxy.org`, `edgeone.gh-proxy.org`, or your own) and downloaded through it. No GitHub cookies, login state or settings are sent; links carrying query parameters such as `token` are never accelerated, and private repositories are skipped by default. With fallback enabled, a HEAD request is sent to the node before downloading to check that it is online. These nodes are run by third parties, can see which file you download and relay its content; verify executables against the sha256 shown on the release page.
 
 Everything is processed locally in your browser:
 

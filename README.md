@@ -28,6 +28,7 @@ npm run test:e2e     # 构建后在本地仿真的知乎 / B 站页面上跑端�
 | `src/background/sw.ts` | 动态注册内容脚本、跨域样式表与图片代理、快捷键 |
 | `src/shared/` | 设置、站点规则（含知乎 / B 站内置规则）、图片分类 |
 | `src/enhance/` | 阅读增强：划词翻译、字体与排版、护眼滤镜、阅读模式、元素屏蔽、按网站自定义 CSS、输入框翻译、YouTube 双语字幕及其设置页 |
+| `src/ghaccel/` | GitHub 加速下载：github.com 页面注入“⚡ 加速”、链接改写、节点探测与测速、弹窗卡片与设置页卡片 |
 | `src/translate/` | 网页翻译：引擎（Google / 微软 / DeepL / AI 大模型）、后台调度、页面渲染、弹窗一栏与翻译设置页 |
 | `src/update/` | 检查更新：从 GitHub Releases 取新版本和改动列表、弹窗提示、设置页“版本与更新” |
 | `src/popup/`、`src/options/`、`src/ui/` | 弹窗、设置页、两者共用的外观控件 |
@@ -69,6 +70,17 @@ npm run test:e2e     # 构建后在本地仿真的知乎 / B 站页面上跑端�
 - 输入框翻译：在输入框、评论框、可编辑区域里写完后快速连按三次空格，内容替换成设置里的语言（默认英文），Ctrl+Z 撤销；密码框不处理
 - YouTube 双语字幕：播放器右下角“译”按钮或设置页开关，原字幕下方显示译文（翻译设置里的目标语言），自动生成的字幕也能用；默认关闭
 - 阅读模式和屏蔽元素默认没有快捷键，可在 `chrome://extensions/shortcuts` 设置
+
+## GitHub 加速下载
+
+在 github.com 上给下载入口加“⚡ 加速”，把原链接拼在加速节点后面下载（gh-proxy 方式，例如 `https://v6.gh-proxy.org/https://github.com/owner/repo/archive/refs/heads/main.zip`）。
+
+- 覆盖：Code 下拉的 Download ZIP（下面多一行“加速下载 ZIP”）和 HTTPS clone 地址（“复制加速 clone 地址”）、Releases 附件和源码包、Tags 页源码包、单文件页 Raw
+- 按钮位置：默认“添加按钮”，保留原下载；可改成“替换链接”，原下载直接走加速
+- 节点：默认 `v6.gh-proxy.org`（Cloudflare 优选），内置主站、cdn（Fastly）、edgeone，也可填自建地址；设置页“测速”测各节点延迟
+- 节点连不上时自动回退到原链接并提示；私有仓库默认不显示（代理拿不到登录状态）；带 token 的链接不加速
+- 弹窗在 github.com 上多一张小卡片：开关 + 切换节点
+- 公共节点是第三方运营的，设置页有风险提示；不点“加速”或“测速”不会访问任何节点
 
 ## 版本号与更新
 

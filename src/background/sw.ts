@@ -7,6 +7,7 @@ import { fetchCssText, fetchWithLimit } from '../shared/css-fetch';
 import '../translate/background';
 import '../enhance/background';
 import '../update/background';
+import '../ghaccel/background';
 import {
   CACHE_PREFIX,
   DEFAULT_SETTINGS,
