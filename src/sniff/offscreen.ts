@@ -63,6 +63,49 @@ async function fetchBytes(url: string, signal: AbortSignal, range?: ByteRange): 
   throw new Error(`下载失败：${err instanceof Error ? err.message : String(err)}（${new URL(url).host}）`);
 }
 
+const CHUNK = 4 << 20;
+
+/**
+ * 分段下载一个大文件：先请求开头一段拿到总大小，剩下的按 4 MB 一段并发下载。
+ * 有的 CDN（B 站）不带 Range 的整文件请求直接拒绝，分段也更快、出错重试的代价更小。
+ */
+async function fetchChunked(url: string, signal: AbortSignal, conc: number, p: Progress): Promise<Blob> {
+  let first: Response | null = null;
+  let err: unknown;
+  for (let i = 0; i < 3 && !first; i++) {
+    if (signal.aborted) throw new Canceled();
+    try {
+      const res = await fetch(url, { credentials: 'include', signal, headers: { Range: `bytes=0-${CHUNK - 1}` }, cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      first = res;
+    } catch (e) {
+      if (signal.aborted) throw new Canceled();
+      err = e;
+      if (/HTTP (401|403|404|410)/.test(String(e))) break;
+      await new Promise((r) => setTimeout(r, 500 * 2 ** i));
+    }
+  }
+  if (!first) throw new Error(`下载失败：${err instanceof Error ? err.message : String(err)}（${new URL(url).host}）`);
+  const head = new Uint8Array(await first.arrayBuffer());
+  const total = Number(/\/(\d+)$/.exec(first.headers.get('content-range') ?? '')?.[1]);
+  // 服务器不支持 Range，直接给了整个文件
+  if (first.status === 200 || !total || head.length >= total) {
+    p.total++;
+    p.add(head.length);
+    return new Blob([head as BlobPart]);
+  }
+  const ranges: ByteRange[] = [];
+  for (let o = head.length; o < total; o += CHUNK) ranges.push({ offset: o, length: Math.min(CHUNK, total - o) });
+  p.total += ranges.length + 1;
+  p.add(head.length);
+  const parts = await pool(ranges, conc, signal, async (r) => {
+    const d = await fetchBytes(url, signal, r);
+    p.add(d.length);
+    return d;
+  });
+  return new Blob([head as BlobPart, ...(parts as BlobPart[])]);
+}
+
 async function fetchText(url: string, signal: AbortSignal): Promise<string> {
   return new TextDecoder().decode(await fetchBytes(url, signal));
 }
@@ -227,13 +270,26 @@ async function runDash(job: Job, signal: AbortSignal, p: Progress): Promise<From
 
 async function runTracks(job: Job, signal: AbortSignal, p: Progress): Promise<FromOffscreen & { type: 'sniff:save' }> {
   const urls = job.tracks ?? [];
-  await allowHosts(job.id, urls);
-  p.set('download', urls.length);
+  await allowHosts(job.id, [...urls, ...(job.backups ?? []).flat()]);
+  p.set('download', 0);
   const blobs: Blob[] = [];
-  for (const u of urls) {
-    const d = await fetchBytes(u, signal);
-    p.add(d.length);
-    blobs.push(new Blob([d as BlobPart]));
+  for (const [i, u] of urls.entries()) {
+    let d: Blob | null = null;
+    let err: unknown;
+    for (const alt of [u, ...(job.backups?.[i] ?? [])]) {
+      const mark = { total: p.total, done: p.done, bytes: p.bytes };
+      try {
+        d = await fetchChunked(alt, signal, job.concurrency, p);
+        break;
+      } catch (e) {
+        if (e instanceof Canceled || signal.aborted) throw new Canceled();
+        err = e;
+        // 换备用地址重新下载这一条，进度退回去
+        Object.assign(p, mark);
+      }
+    }
+    if (!d) throw err;
+    blobs.push(d);
   }
   p.set('merge');
   return save(job, [{ blob: await mergeFmp4(blobs), ext: 'mp4' }]);

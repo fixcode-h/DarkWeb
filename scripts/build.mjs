@@ -51,6 +51,7 @@ await Promise.all([
   build({ ...common, entryPoints: [join(root, 'src/sniff/popup.ts')], outfile: join(dist, 'sniff-popup.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/sniff/options.ts')], outfile: join(dist, 'sniff-options.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/sniff/offscreen.ts')], outfile: join(dist, 'sniff-offscreen.js'), format: 'iife' }),
+  build({ ...common, entryPoints: [join(root, 'src/sniff/bili/entry.ts')], outfile: join(dist, 'sniff-bili.js'), format: 'iife' }),
 ]);
 copyFileSync(join(root, 'src/sniff/sniff.css'), join(dist, 'sniff.css'));
 copyFileSync(join(root, 'src/sniff/offscreen.html'), join(dist, 'sniff-offscreen.html'));

@@ -79,6 +79,20 @@ async function render(): Promise<void> {
     conc.append(b);
   }
 
+  const fab = toggle('视频上的悬浮下载按钮', '鼠标停在视频上时，右上角出现“下载”按钮，点了开始嗅探', s.fab, (v) => save({ fab: v }));
+
+  const bili = toggle('B 站', '在视频和番剧页面直接列出清晰度，下载后自动合并音视频；清晰度跟随你账号本来能看的', s.bili.enabled, (v) => save({ bili: { ...s.bili, enabled: v } }));
+  const codec = el('div', 'seg');
+  codec.style.width = '260px';
+  for (const [k, label] of [['avc', 'AVC'], ['hevc', 'HEVC'], ['av1', 'AV1'], ['smallest', '最小']] as const) {
+    const b = el('button', s.bili.codec === k ? 'on' : '', label);
+    b.type = 'button';
+    b.addEventListener('click', () => save({ bili: { ...s.bili, codec: k } }));
+    codec.append(b);
+  }
+  const codecField = field('B 站视频编码（AVC 兼容性最好）', codec);
+  codecField.classList.toggle('inactive', !s.bili.enabled);
+
   const warn = el('div', 'sn-warnbox');
   warn.append(el('b', '', '版权提示：'), '请只下载你有权保存的内容，仅供个人离线观看。Drak 不支持也不会尝试下载 DRM 加密、付费会员专享或需要绕过登录的内容。');
 
@@ -91,6 +105,10 @@ async function render(): Promise<void> {
     field('忽略小于此大小的文件（KB）', min),
     field('文件名（可用 {标题} {日期}）', name),
     field('同时下载的分片数', conc),
+    fab,
+    el('h2', 'sub', '站点适配'),
+    bili,
+    codecField,
     warn,
   );
   root.classList.toggle('inactive', !s.enabled);

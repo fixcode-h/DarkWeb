@@ -9,6 +9,11 @@
 import { detect, headerValue, hostOf, isYouTubeHost, totalSize, type MediaKind } from './detect';
 import { SNIFF_KEY, loadSniff, normalizeSniff, renderFilename, type SniffSettings } from './settings';
 import type { FromOffscreen, Job, OffscreenMsg, Task } from './jobs';
+import { biliInfo, isBiliPage, pickAudio, type SiteState } from './site';
+import type { SiteAction } from './site-ui';
+import type { BiliMedia, BiliPart } from './bili/api';
+import type { BiliStreams } from './bili/parse';
+import { pickTrack, toSrt } from './bili/parse';
 
 declare const __DRAK_STORE__: boolean;
 
@@ -26,6 +31,8 @@ export interface TabState {
   items: SniffItem[];
   drm: boolean;
   pageUrl: string;
+  /** 站点适配器（B 站）的结果 */
+  site?: SiteState;
 }
 
 export interface SniffState {
@@ -36,6 +43,7 @@ export interface SniffState {
   items: SniffItem[];
   tasks: Task[];
   canDownload: boolean;
+  site?: SiteState;
 }
 
 const MAX_ITEMS = 200;
@@ -200,9 +208,10 @@ async function start(id: number): Promise<SniffState> {
   if (!settings?.enabled || !tab || !supportedUrl(tab.url)) return state(id);
   active.add(id);
   const t = await tabState(id);
-  if (t.pageUrl !== tab.url) Object.assign(t, { items: [], drm: false, pageUrl: tab.url });
+  if (t.pageUrl !== tab.url) Object.assign(t, { items: [], drm: false, pageUrl: tab.url, site: undefined });
   await saveActive();
   await scan(id);
+  void siteScan(id, tab.url!);
   persist(id);
   return state(id);
 }
@@ -210,6 +219,7 @@ async function start(id: number): Promise<SniffState> {
 async function stop(id: number): Promise<void> {
   active.delete(id);
   tabs.delete(id);
+  media.delete(id);
   await chrome.storage.session.remove(tabKey(id));
   await saveActive();
   await badge(id);
@@ -220,6 +230,7 @@ chrome.tabs.onRemoved.addListener((id) => {
   if (!active.has(id) && !tabs.has(id)) return;
   active.delete(id);
   tabs.delete(id);
+  media.delete(id);
   void chrome.storage.session.remove(tabKey(id));
   void saveActive();
 });
@@ -231,8 +242,10 @@ chrome.tabs.onUpdated.addListener(async (id, info, tab) => {
     if (!supportedUrl(info.url)) return void stop(id);
     const t = await tabState(id);
     if (t.pageUrl !== info.url) {
-      Object.assign(t, { items: [], drm: false, pageUrl: info.url });
+      Object.assign(t, { items: [], drm: false, pageUrl: info.url, site: undefined });
       persist(id);
+      // B 站切分 P、换视频是单页应用内跳转，不会再触发 complete
+      void siteScan(id, info.url);
     }
   }
   if (info.status === 'complete' && tab.url) void scan(id).then(() => notifyTab(id));
@@ -248,10 +261,131 @@ async function state(id: number | undefined): Promise<SniffState> {
     active: id !== undefined && active.has(id),
     drm: !!t?.drm,
     items: t?.items ?? [],
+    site: t?.site,
     tasks,
     canDownload: await chrome.permissions.contains({ permissions: ['downloads'] }),
   };
 }
+
+// ---- 站点适配（B 站） ----
+
+/** 完整的 B 站结果只留在内存里（含播放地址），给界面的是摘要 */
+const media = new Map<number, { url: string; m: BiliMedia; at: number }>();
+
+/** 在页面隔离环境里调用 sniff-bili.js 挂的函数 */
+async function inBili<T>(id: number, fn: string, ...args: unknown[]): Promise<T> {
+  await chrome.scripting.executeScript({ target: { tabId: id }, files: ['sniff-bili.js'] });
+  const [r] = await chrome.scripting.executeScript({
+    target: { tabId: id },
+    func: async (name: string, a: unknown[]) => {
+      try {
+        const api = (globalThis as unknown as { __drakBili: Record<string, (...x: unknown[]) => Promise<unknown>> }).__drakBili;
+        return { ok: true, v: await api[name](...a) };
+      } catch (e) {
+        return { ok: false, e: e instanceof Error ? e.message : String(e) };
+      }
+    },
+    args: [fn, args],
+  });
+  const res = r?.result as { ok: boolean; v?: T; e?: string } | undefined;
+  if (!res?.ok) throw new Error(res?.e ?? '页面没有响应');
+  return res.v as T;
+}
+
+const scanning = new Map<number, string>();
+async function siteScan(id: number, url: string): Promise<void> {
+  if (!settings?.bili.enabled || !isBiliPage(url) || scanning.get(id) === url) return;
+  scanning.set(id, url);
+  const t = await tabState(id);
+  t.site = { loading: true };
+  persist(id);
+  try {
+    // 页面刚开始跳转时脚本还注入不进去，稍等一下
+    let m: BiliMedia | null = null;
+    for (let i = 0; i < 3 && !m; i++) {
+      try {
+        m = await inBili<BiliMedia | null>(id, 'resolve', url);
+      } catch (e) {
+        if (i === 2) throw e;
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    }
+    if (!m) throw new Error('不是视频页面');
+    const part = m.parts[m.current];
+    const subs = await inBili<{ lang: string; label: string; url: string }[]>(id, 'subtitles', part).catch(() => []);
+    if (t.pageUrl !== url || !active.has(id)) return;
+    media.set(id, { url, m, at: Date.now() });
+    t.site = { info: biliInfo(m, settings.bili.codec, subs) };
+  } catch (e) {
+    if (t.pageUrl === url) t.site = { error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    scanning.delete(id);
+    persist(id);
+  }
+}
+
+async function biliStreams(id: number, part: BiliPart): Promise<BiliStreams> {
+  const c = media.get(id);
+  const cur = c?.m.parts[c.m.current];
+  // 播放地址有时效，超过 20 分钟重新取
+  if (c && cur?.cid === part.cid && Date.now() - c.at < 20 * 60_000) return c.m.streams;
+  return inBili<BiliStreams>(id, 'streamsFor', part);
+}
+
+async function siteDownload(tabId: number, a: SiteAction): Promise<{ ok: boolean; error?: string }> {
+  await ready;
+  if (!(await chrome.permissions.contains({ permissions: ['downloads'] }))) return { ok: false, error: '需要先在弹窗里授权“管理下载内容”' };
+  if (!media.has(tabId)) {
+    // 后台被浏览器回收过，内存里的结果没了：重新取一次
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (tab?.url && active.has(tabId)) await siteScan(tabId, tab.url);
+  }
+  const c = media.get(tabId);
+  if (!c) return { ok: false, error: '视频信息已过期，请重新嗅探' };
+  const m = c.m;
+  const part = m.parts.find((p) => p.index === a.part) ?? m.parts[m.current];
+  const vars = { 标题: m.title, 分P: m.parts.length > 1 ? [m.kind === 'bangumi' ? `第${part.index}集` : `P${part.index}`, part.title].filter(Boolean).join(' ') : undefined, UP主: m.owner };
+  try {
+    if (a.what === 'cover') {
+      if (!m.cover) throw new Error('没有封面');
+      await saveAs(m.cover, `${renderFilename(settings!.filename, vars)}.${/\.png(\?|$)/i.test(m.cover) ? 'png' : 'jpg'}`);
+      return { ok: true };
+    }
+    if (a.what === 'danmaku') {
+      await saveAs(`https://comment.bilibili.com/${part.cid}.xml`, `${renderFilename(settings!.filename, vars)}.danmaku.xml`);
+      return { ok: true };
+    }
+    if (a.what === 'subtitle') {
+      const subs = await inBili<{ lang: string; url: string }[]>(tabId, 'subtitles', part);
+      const sub = subs.find((x) => x.lang === a.lang);
+      if (!sub) throw new Error('这一集没有这个字幕');
+      const body = await inBili<{ from: number; to: number; content: string }[]>(tabId, 'subtitleBody', sub.url);
+      await saveAs(`data:application/x-subrip;charset=utf-8,${encodeURIComponent(toSrt(body))}`, `${renderFilename(settings!.filename, vars)}.${a.lang}.srt`);
+      return { ok: true };
+    }
+    const streams = await biliStreams(tabId, part);
+    if (streams.drm) throw new Error('加密内容（DRM），无法下载');
+    const q = streams.qualities.find((x) => x.qn === a.qn && x.available) ?? streams.qualities.find((x) => x.available);
+    const v = q && pickTrack(q, settings!.bili.codec);
+    if (!q || !v) throw new Error('当前账号没有可下载的清晰度');
+    const audio = pickAudio({ streams });
+    const name = renderFilename(settings!.filename, { ...vars, 清晰度: q.label });
+    const id = newTaskId();
+    const t: Task = { id, tabId, name, stage: 'queued', done: 0, total: 0, bytes: 0, speed: 0, started: Date.now() };
+    tasks.unshift(t);
+    tasks = tasks.slice(0, 30);
+    referers.set(id, 'https://www.bilibili.com/');
+    saveTasks();
+    await ensureOffscreen();
+    const job: Job = { id, kind: 'tracks', url: v.track.url, tracks: [v.track.url, ...(audio ? [audio.url] : [])], backups: [v.track.backup, audio?.backup ?? []], name, concurrency: settings!.concurrency };
+    await toOffscreen({ target: 'sniff-offscreen', type: 'run', job });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const newTaskId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 // ---- 下载任务 ----
 
@@ -302,7 +436,11 @@ async function allowHosts(taskId: string, hosts: string[]): Promise<void> {
         priority: 1,
         action: {
           type: 'modifyHeaders' as chrome.declarativeNetRequest.RuleActionType,
-          requestHeaders: [{ header: 'referer', operation: 'set' as chrome.declarativeNetRequest.HeaderOperation, value: referer }],
+          // Origin 也换成页面的：有的 CDN（如 B 站）看到 chrome-extension:// 来源直接拒绝
+          requestHeaders: [
+            { header: 'referer', operation: 'set' as chrome.declarativeNetRequest.HeaderOperation, value: referer },
+            { header: 'origin', operation: 'set' as chrome.declarativeNetRequest.HeaderOperation, value: new URL(referer).origin },
+          ],
         },
         condition: {
           requestDomains: [...set],
@@ -347,7 +485,7 @@ async function download(tabId: number, url: string): Promise<{ ok: boolean; erro
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   const title = (tab?.title ?? '').replace(/[-_|–—]\s*(哔哩哔哩|bilibili).*$/i, '').trim();
   const name = renderFilename(settings!.filename, { 标题: title || urlName(url) || 'video' });
-  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const id = newTaskId();
   const task: Task = { id, tabId, name, stage: 'queued', done: 0, total: 0, bytes: 0, speed: 0, started: Date.now() };
   tasks.unshift(task);
   tasks = tasks.slice(0, 30);
@@ -461,6 +599,7 @@ type Msg =
   | { type: 'sniff:stop'; tabId?: number }
   | { type: 'sniff:state'; tabId?: number }
   | { type: 'sniff:download'; tabId?: number; url: string }
+  | { type: 'sniff:site'; tabId?: number; action: SiteAction }
   | { type: 'sniff:cancel'; id: string }
   | { type: 'sniff:clear' }
   | { type: 'sniff:show'; id: string };
@@ -482,6 +621,8 @@ chrome.runtime.onMessage.addListener((msg: Msg | FromOffscreen, sender, reply) =
       return done(state(tabId));
     case 'sniff:download':
       return tabId === undefined ? false : done(download(tabId, (msg as { url: string }).url));
+    case 'sniff:site':
+      return tabId === undefined ? false : done(siteDownload(tabId, (msg as { action: SiteAction }).action));
     case 'sniff:cancel':
       return done(cancel((msg as { id: string }).id));
     case 'sniff:clear':

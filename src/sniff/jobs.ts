@@ -8,6 +8,8 @@ export interface Job {
   /** hls / dash：播放列表地址；tracks：每条轨道一个完整文件（如 B 站的视频 m4s + 音频 m4s） */
   url: string;
   tracks?: string[];
+  /** 每条轨道的备用地址（B 站的 backupUrl），主地址失败时依次换 */
+  backups?: string[][];
   /** 不带扩展名 */
   name: string;
   concurrency: number;

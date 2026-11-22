@@ -36,6 +36,20 @@
 .sn-task-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
 .sn-meta { color: var(--subtle); font-size: var(--text-footnote); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
+/* 站点适配（B 站）区块 */
+.st { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.st-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.st-badge { flex: none; font-size: var(--text-caption); padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); }
+.st-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.st-sub { color: var(--subtle); font-size: var(--text-footnote); line-height: 1.5; }
+.st-warn { color: var(--warning); }
+.st-row { display: flex; gap: 6px; }
+.st-sel { flex: 1; min-width: 0; height: 26px; }
+.st-btn { height: 26px; padding: 0 12px; flex: none; }
+.st-acts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--text-footnote); }
+.st-link { background: none; border: 0; padding: 0; height: auto; color: var(--accent-text); cursor: pointer; }
+.st-link:hover:not(:disabled) { text-decoration: underline; background: none; }
+
 /* 设置页 */
 .sn-types { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
 .sn-chip { height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line-strong); background: none; color: var(--muted); font: var(--text-footnote) var(--mono); }
@@ -46,3 +60,4 @@
 .sn-warnbox b { color: var(--warning); }
 .sn-num { width: 90px !important; }
 #sniffSlot:empty { display: none; }
+.sniff .field.inactive { opacity: 0.5; pointer-events: none; }
