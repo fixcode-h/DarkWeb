@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Drak 暗色模式",
   "short_name": "Drak",
-  "description": "自适应暗色模式：按颜色角色重新配色，保留边框与层次，不做简单反色。",
+  "description": "自适应暗色模式：按颜色角色重新配色，不做简单反色。另含网页翻译、阅读模式、元素屏蔽、Markdown 渲染编辑、GitHub 加速下载与网页音视频嗅探。",
   "version": "0.0.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhXaEbpti6+3+BmzmBm5VV85van36FUUmIiuArgJ/Xwu7lng9aM+xwiGgVyB0JmzXXYDRoX8JSOSmxCNTwNu05zP09Zy1grpAL08vVdrOZ5G+ICaNcqJRdmoODnGOeotUW9qFNC3vgygePMTb5MoQ1wYt1O4AAdbALlo3b4a5jSG6plJmmfDLz5c5dPQg1A/IH+ghbf3DgEFMgri5zS8qAHYrNQnpq+D6bJSlUQjqJQ+tJ249NPuXPjAJCu6Glb4LosNuvjL2N0SMWrGkXDZ2yt2jmCCuJ043dVnGbV3EzmyLguLL9Mpbc1JoAHZ1VEnHxKBilg+TkqtWNQzqbdPh0wIDAQAB",
   "minimum_chrome_version": "120",
