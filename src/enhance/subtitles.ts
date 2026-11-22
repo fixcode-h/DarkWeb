@@ -5,6 +5,10 @@
  * 做法是盯住播放器自己画出来的字幕：字幕一变就把这一屏的文字送去翻译（有缓存），
  * 译文作为一行插在原字幕下面。不读取视频的字幕文件，所以任何字幕轨（含自动生成）都能用。
  * 只有打开开关后才会把字幕文字发给翻译服务。
+ *
+ * 自动生成字幕是一个词一个词滚出来的，文字几百毫秒就变一次，往往等不到译文回来就变了。
+ * 所以每个字幕框同一时间只发一个请求，回来后如果字幕已经变了就接着翻最新的；
+ * 新译文到之前先留着上一句译文（只比原文慢半拍），不会一直空着。
  */
 import { looksLikeTarget } from '../translate/lang';
 import { TRANSLATE_KEY, loadTranslate, normalizeTranslate, type TranslateResponse, type TranslateSettings } from '../translate/settings';
@@ -51,7 +55,8 @@ class Subtitles {
   private observer = new MutationObserver(() => this.schedule());
   private timer = 0;
   private readonly cache = new Map<string, string>();
-  private readonly pending = new Set<string>();
+  /** 每个字幕框：最近一次拿到的译文、是否有请求在路上 */
+  private readonly wins = new WeakMap<Element, { last?: string; busy?: boolean }>();
 
   async init(): Promise<void> {
     [this.enhance, this.tr] = await Promise.all([loadEnhance(), loadTranslate()]);
@@ -64,7 +69,13 @@ class Subtitles {
       if (changes[TRANSLATE_KEY]) {
         const before = this.tr.target + this.tr.engine;
         this.tr = normalizeTranslate(changes[TRANSLATE_KEY].newValue);
-        if (before !== this.tr.target + this.tr.engine) this.cache.clear();
+        if (before !== this.tr.target + this.tr.engine) {
+          this.cache.clear();
+          this.container?.querySelectorAll('.caption-window').forEach((w) => {
+            const st = this.wins.get(w);
+            if (st) st.last = undefined;
+          });
+        }
       }
       this.syncButton();
       this.render();
@@ -126,10 +137,20 @@ class Subtitles {
       const box = win.querySelector('.captions-text') ?? win;
       let line = box.querySelector(`:scope > .${SUB_CLASS}`) as HTMLElement | null;
       const text = on ? captionText(win) : '';
-      const translated = text && !looksLikeTarget(text, this.tr.target) ? this.cache.get(text) : undefined;
+      const state = this.wins.get(win) ?? {};
+      this.wins.set(win, state);
+      if (!text || looksLikeTarget(text, this.tr.target)) {
+        // 字幕清空或换了一句已是目标语言的：旧译文作废
+        state.last = undefined;
+        line?.remove();
+        continue;
+      }
+      const cached = this.cache.get(text);
+      if (cached) state.last = cached;
+      else void this.request(win, text);
+      const translated = cached ?? state.last;
       if (!translated) {
         line?.remove();
-        if (text && !looksLikeTarget(text, this.tr.target)) void this.request(text);
         continue;
       }
       if (!line) {
@@ -149,21 +170,38 @@ class Subtitles {
     }
   }
 
-  private async request(text: string): Promise<void> {
-    if (this.pending.has(text)) return;
-    this.pending.add(text);
+  /** 翻译一个字幕框的文字；同一个框同一时间只有一个请求，回来后字幕变了就接着翻最新的 */
+  private async request(win: Element, text: string): Promise<void> {
+    const state = this.wins.get(win);
+    if (!state || state.busy) return;
+    state.busy = true;
+    const { target, engine } = this.tr;
     let res: TranslateResponse | undefined;
     try {
-      res = await chrome.runtime.sendMessage({ type: 'tr:translate', texts: [escapeHtml(text).replace(/\n/g, '<br>')], to: this.tr.target, engine: this.tr.engine });
+      res = await chrome.runtime.sendMessage({ type: 'tr:translate', texts: [escapeHtml(text).replace(/\n/g, '<br>')], to: target, engine });
     } catch {
       res = undefined;
     }
-    this.pending.delete(text);
-    if (!res?.ok || !res.items?.[0]) return;
-    const t = document.createElement('template');
-    t.innerHTML = res.items[0].text.replace(/<br\s*\/?>/gi, '\n');
-    this.cache.set(text, (t.content.textContent ?? '').trim());
-    if (this.cache.size > CACHE_MAX) this.cache.delete(this.cache.keys().next().value!);
+    if (!res?.ok || !res.items?.[0]) {
+      // 失败了歇一会儿再重试，别跟着每个新词刷请求
+      await new Promise((r) => setTimeout(r, 1500));
+      state.busy = false;
+      this.render();
+      return;
+    }
+    state.busy = false;
+    // 请求期间改了目标语言或引擎：这次结果作废，按新设置重翻
+    if (target === this.tr.target && engine === this.tr.engine) {
+      const t = document.createElement('template');
+      t.innerHTML = res.items[0].text.replace(/<br\s*\/?>/gi, '\n');
+      const translated = (t.content.textContent ?? '').trim();
+      if (translated) {
+        this.cache.set(text, translated);
+        if (this.cache.size > CACHE_MAX) this.cache.delete(this.cache.keys().next().value!);
+        // 字幕还没清空就先显示这句（即便已经多滚出几个词）
+        if (this.enhance.subtitles.enabled && captionText(win)) state.last = translated;
+      }
+    }
     this.render();
   }
 }
