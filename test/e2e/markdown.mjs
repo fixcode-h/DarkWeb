@@ -46,6 +46,14 @@ npm run build -- --zip
 const answer = 42; // 注释
 \`\`\`
 
+\`\`\`mermaid
+flowchart LR
+  A[打开] --> B{有图?}
+\`\`\`
+
+> [!TIP]
+> 拖动两侧边缘调宽度
+
 ## 开发计划
 
 - [x] 暗色引擎
@@ -114,12 +122,16 @@ async function main() {
     await page.waitForSelector('html[data-drak-md="render"] .md-body h1', { timeout: 8000 });
     check('识别纯文本 .md 并渲染', (await page.textContent('.md-body h1')) === 'Drak 暗色模式');
     check('暗色引擎让位', await page.evaluate(() => document.documentElement.hasAttribute('data-drak-off') && !document.documentElement.hasAttribute('data-drak-mode')));
-    check('默认深色主题', await page.evaluate(() => getComputedStyle(document.querySelector('.md-app')).backgroundColor) === 'rgb(23, 23, 23)');
+    check('默认深色主题', await page.evaluate(() => getComputedStyle(document.querySelector('.md-app')).backgroundColor) === 'rgb(38, 38, 36)');
     check('标签页标题是文件名', (await page.title()) === 'README.md');
     const toc = await page.$$eval('.md-toc a[data-id]', (as) => as.map((a) => a.textContent));
     check('目录列出标题', toc.join('|') === 'Drak 暗色模式|功能特性|按颜色角色重新配色|安装|开发计划|许可证', toc.join('|'));
     check('表格', (await page.$$('.md-body table td')).length === 9);
-    check('代码高亮', (await page.$$('.md-body pre[data-lang="js"] .hljs-keyword')).length > 0);
+    check('代码高亮', (await page.$$('.md-body .md-code[data-lang="js"] .hljs-keyword')).length > 0);
+    check('代码块顶栏和行号', (await page.textContent('.md-code[data-lang="bash"] .md-code-lang')) === 'bash · 3 行' && (await page.$$('.md-code[data-lang="bash"] .md-ln')).length === 3);
+    check('提示块', (await page.textContent('.md-alert[data-kind="tip"] .md-alert-title')) === '提示');
+    await page.waitForSelector('.md-mermaid[data-done]', { timeout: 15000 }).catch(() => {});
+    check('Mermaid 画成图', (await page.getAttribute('.md-mermaid', 'data-done')) === '1' && !!(await page.$('.md-mermaid .md-mermaid-svg svg .node')), await page.getAttribute('.md-mermaid', 'data-done'));
     check('任务列表', (await page.$$('.md-body .task-box')).length === 3 && (await page.$$('.md-body .task-box.checked')).length === 2);
     check('脚注', (await page.$$('.md-body .footnotes li')).length === 1);
     await page.waitForTimeout(200);

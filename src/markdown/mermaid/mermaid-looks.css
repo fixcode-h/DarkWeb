@@ -1,0 +1,364 @@
+/*
+ * mermaid 图的几套整体风格（设置 → Markdown 样式 → Mermaid 图 → 风格），由 mermaid-fx.ts 在 .md-mermaid 上标 data-look。
+ * 每套只定义一组 --mx-* 变量：三种节点（普通 node / 判断 pick / 起止 end）的渐变上沿 a、下沿 b、描边 line，
+ * 连线 edge，线上文字的底、字、边。颜色都从面板主题和 Markdown 那组色相混出来，换配色、切深浅色自动跟着变。
+ * 变量定义在 .md-mermaid 上（不放 :root）：里面引用的 --md-pre-bg 等在这里一定拿得到。
+ */
+
+/* 素净：节点一律中性灰底，判断节点描一道强调色、起止节点边框深一档；最接近面板本身的低饱和风格 */
+.md-mermaid[data-look='soft'] {
+  --mx-note-b: color-mix(in srgb, var(--md-gold) 8%, var(--md-pre-bg));
+  --mx-note-line: color-mix(in srgb, var(--md-gold) 45%, var(--md-pre-bg));
+  --mx-c0: color-mix(in srgb, var(--md-blue) 72%, var(--md-pre-bg));
+  --mx-c1: color-mix(in srgb, var(--md-teal) 72%, var(--md-pre-bg));
+  --mx-c2: color-mix(in srgb, var(--md-gold) 72%, var(--md-pre-bg));
+  --mx-c3: color-mix(in srgb, var(--md-violet) 72%, var(--md-pre-bg));
+  --mx-c4: color-mix(in srgb, var(--md-coral) 72%, var(--md-pre-bg));
+  --mx-c5: color-mix(in srgb, var(--md-gray) 72%, var(--md-pre-bg));
+  --mx-canvas-glow: transparent;
+  --mx-node-a: color-mix(in srgb, var(--card) 80%, var(--md-pre-bg));
+  --mx-node-b: color-mix(in srgb, var(--card) 55%, var(--md-pre-bg));
+  --mx-node-line: color-mix(in srgb, var(--fg) 24%, var(--md-pre-bg));
+  --mx-pick-a: color-mix(in srgb, var(--md-blue) 8%, var(--md-pre-bg));
+  --mx-pick-b: color-mix(in srgb, var(--md-blue) 12%, var(--md-pre-bg));
+  --mx-pick-line: color-mix(in srgb, var(--md-blue) 60%, var(--md-pre-bg));
+  --mx-end-a: color-mix(in srgb, var(--card) 80%, var(--md-pre-bg));
+  --mx-end-b: color-mix(in srgb, var(--card) 55%, var(--md-pre-bg));
+  --mx-end-line: color-mix(in srgb, var(--fg) 50%, var(--md-pre-bg));
+  --mx-edge: color-mix(in srgb, var(--fg) 42%, var(--md-pre-bg));
+  --mx-label-bg: var(--md-pre-bg);
+  --mx-label-fg: var(--muted);
+  --mx-label-line: color-mix(in srgb, var(--fg) 14%, var(--md-pre-bg));
+  --mx-shadow: none;
+  --mx-glow: none;
+}
+
+/* 柔彩：同一组和谐色相的淡底 + 同色描边，普通蓝、判断琥珀、起止青；连线带一点蓝 */
+.md-mermaid[data-look='tint'] {
+  --mx-note-b: color-mix(in srgb, var(--md-gold) 14%, var(--md-pre-bg));
+  --mx-note-line: color-mix(in srgb, var(--md-gold) 55%, var(--md-pre-bg));
+  --mx-c0: color-mix(in srgb, var(--md-blue) 85%, var(--md-pre-bg));
+  --mx-c1: color-mix(in srgb, var(--md-teal) 85%, var(--md-pre-bg));
+  --mx-c2: color-mix(in srgb, var(--md-gold) 85%, var(--md-pre-bg));
+  --mx-c3: color-mix(in srgb, var(--md-violet) 85%, var(--md-pre-bg));
+  --mx-c4: color-mix(in srgb, var(--md-coral) 85%, var(--md-pre-bg));
+  --mx-c5: color-mix(in srgb, var(--md-gray) 85%, var(--md-pre-bg));
+  --mx-canvas-glow: color-mix(in srgb, var(--md-blue) 6%, transparent);
+  --mx-node-a: color-mix(in srgb, var(--md-blue) 9%, var(--md-pre-bg));
+  --mx-node-b: color-mix(in srgb, var(--md-blue) 15%, var(--md-pre-bg));
+  --mx-node-line: color-mix(in srgb, var(--md-blue) 48%, var(--md-pre-bg));
+  --mx-pick-a: color-mix(in srgb, var(--md-gold) 10%, var(--md-pre-bg));
+  --mx-pick-b: color-mix(in srgb, var(--md-gold) 17%, var(--md-pre-bg));
+  --mx-pick-line: color-mix(in srgb, var(--md-gold) 55%, var(--md-pre-bg));
+  --mx-end-a: color-mix(in srgb, var(--md-teal) 10%, var(--md-pre-bg));
+  --mx-end-b: color-mix(in srgb, var(--md-teal) 17%, var(--md-pre-bg));
+  --mx-end-line: color-mix(in srgb, var(--md-teal) 52%, var(--md-pre-bg));
+  --mx-edge: color-mix(in srgb, var(--md-blue) 40%, var(--muted));
+  --mx-label-bg: color-mix(in srgb, var(--md-blue) 9%, var(--md-pre-bg));
+  --mx-label-fg: color-mix(in srgb, var(--md-blue) 55%, var(--fg));
+  --mx-label-line: transparent;
+  --mx-shadow: none;
+  --mx-glow: none;
+}
+
+/* 浮卡：节点是面板的卡片（卡片底 + 细边 + 柔和投影），种类只在描边上点一下色；连线中性灰 */
+.md-mermaid[data-look='card'] {
+  --mx-note-b: color-mix(in srgb, var(--md-gold) 8%, var(--card));
+  --mx-note-line: color-mix(in srgb, var(--md-gold) 50%, var(--card));
+  --mx-c0: color-mix(in srgb, var(--md-blue) 80%, var(--md-pre-bg));
+  --mx-c1: color-mix(in srgb, var(--md-teal) 80%, var(--md-pre-bg));
+  --mx-c2: color-mix(in srgb, var(--md-gold) 80%, var(--md-pre-bg));
+  --mx-c3: color-mix(in srgb, var(--md-violet) 80%, var(--md-pre-bg));
+  --mx-c4: color-mix(in srgb, var(--md-coral) 80%, var(--md-pre-bg));
+  --mx-c5: color-mix(in srgb, var(--md-gray) 80%, var(--md-pre-bg));
+  --mx-canvas-glow: transparent;
+  --mx-node-a: var(--card);
+  --mx-node-b: color-mix(in srgb, var(--fg) 2.5%, var(--card));
+  --mx-node-line: var(--line-strong);
+  --mx-pick-a: var(--card);
+  --mx-pick-b: color-mix(in srgb, var(--md-violet) 6%, var(--card));
+  --mx-pick-line: color-mix(in srgb, var(--md-violet) 55%, var(--card));
+  --mx-end-a: var(--card);
+  --mx-end-b: color-mix(in srgb, var(--md-teal) 6%, var(--card));
+  --mx-end-line: color-mix(in srgb, var(--md-teal) 55%, var(--card));
+  --mx-edge: var(--subtle);
+  --mx-label-bg: var(--card);
+  --mx-label-fg: var(--muted);
+  --mx-label-line: var(--line);
+  --mx-shadow: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.08)) drop-shadow(0 4px 10px rgb(0 0 0 / 0.07));
+  --mx-glow: none;
+}
+:root.dark .md-mermaid[data-look='card'] {
+  --mx-shadow: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45)) drop-shadow(0 6px 14px rgb(0 0 0 / 0.35));
+}
+
+/* 经典：之前的样子（蓝 / 紫 / 青渐变 + 外发光），想要老样子时选它 */
+.md-mermaid[data-look='classic'] {
+  --mx-note-b: var(--mmd-note);
+  --mx-note-line: var(--mmd-note-line);
+  --mx-c0: color-mix(in srgb, var(--md-blue) 100%, var(--md-pre-bg));
+  --mx-c1: color-mix(in srgb, var(--md-teal) 100%, var(--md-pre-bg));
+  --mx-c2: color-mix(in srgb, var(--md-gold) 100%, var(--md-pre-bg));
+  --mx-c3: color-mix(in srgb, var(--md-violet) 100%, var(--md-pre-bg));
+  --mx-c4: color-mix(in srgb, var(--md-coral) 100%, var(--md-pre-bg));
+  --mx-c5: color-mix(in srgb, var(--md-gray) 100%, var(--md-pre-bg));
+  --mx-canvas-glow: color-mix(in srgb, var(--md-violet) 7%, transparent);
+  --mx-node-a: var(--mmd-node-a);
+  --mx-node-b: var(--mmd-node-b);
+  --mx-node-line: var(--mmd-node-line);
+  --mx-pick-a: var(--mmd-pick-a);
+  --mx-pick-b: var(--mmd-pick-b);
+  --mx-pick-line: var(--mmd-pick-line);
+  --mx-end-a: var(--mmd-end-a);
+  --mx-end-b: var(--mmd-end-b);
+  --mx-end-line: var(--mmd-end-line);
+  --mx-edge: var(--mmd-edge);
+  --mx-label-bg: var(--md-pre-bg);
+  --mx-label-fg: var(--muted);
+  --mx-label-line: transparent;
+  --mx-shadow: none;
+  --mx-glow: drop-shadow(0 0 4px color-mix(in srgb, var(--md-blue) 25%, transparent));
+}
+
+/*
+ * 节点：纯色时取下沿色，开了渐变底取 mermaid-fx.ts 加的渐变；用户自己写了颜色的节点没有 data-k，不动。
+ * mermaid 12 默认的 neo 外观给每个节点加一圈浅灰投影，深色底上像一层发白的光晕（用户嫌丑的主要原因），一律换成风格自己的
+ */
+.md-mermaid[data-look] svg :where(.node .outer-path, .node rect, .node polygon, .node circle) {
+  filter: none !important;
+}
+.md-mermaid[data-look] svg [data-k] {
+  stroke-width: 1px !important;
+  filter: var(--mx-shadow) !important;
+}
+.md-mermaid[data-look='classic'] svg [data-k] {
+  filter: var(--mx-glow) !important;
+}
+.md-mermaid[data-look] svg [data-k='node'] {
+  fill: var(--mx-node-b) !important;
+  stroke: var(--mx-node-line) !important;
+}
+.md-mermaid[data-look] svg [data-k='pick'] {
+  fill: var(--mx-pick-b) !important;
+  stroke: var(--mx-pick-line) !important;
+}
+.md-mermaid[data-look] svg [data-k='end'] {
+  fill: var(--mx-end-b) !important;
+  stroke: var(--mx-end-line) !important;
+}
+.md-mermaid[data-look] svg [data-ks] {
+  stroke-width: 1px !important;
+}
+.md-mermaid[data-look] svg [data-ks='node'] {
+  stroke: var(--mx-node-line) !important;
+}
+.md-mermaid[data-look] svg [data-ks='end'] {
+  stroke: var(--mx-end-line) !important;
+}
+.md-mermaid[data-look] svg [data-k][data-g] {
+  fill: var(--mx-g) !important;
+}
+
+/* 连线：粗细跟设置，线头箭头和线同色 */
+.md-mermaid[data-look] svg .edgePaths path,
+.md-mermaid[data-look] svg .flowchart-link {
+  stroke: var(--mx-edge) !important;
+  stroke-width: var(--md-mermaid-edge) !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.md-mermaid[data-look] svg marker :is(path, circle) {
+  fill: var(--mx-edge) !important;
+  stroke: var(--mx-edge) !important;
+  stroke-linejoin: round;
+}
+.md-mermaid[data-look] svg .mx-edge.hot {
+  stroke: var(--md-blue) !important;
+}
+
+/* 线上的字：一枚小胶囊，压在线上不被线穿过 */
+.md-mermaid[data-look] svg foreignObject:has(.edgeLabel) {
+  overflow: visible;
+}
+.md-mermaid[data-look] svg .labelBkg {
+  background: transparent !important;
+}
+.md-mermaid[data-look] svg span.edgeLabel {
+  display: inline-block;
+  white-space: nowrap;
+  padding: 0 0.45em;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--mx-label-fg) !important;
+  background: var(--mx-label-bg) !important;
+  box-shadow: 0 0 0 1px var(--mx-label-line);
+}
+.md-mermaid[data-look] svg span.edgeLabel p {
+  margin: 0;
+  white-space: nowrap;
+}
+.md-mermaid[data-look] svg span.edgeLabel:empty {
+  display: none;
+}
+
+/* 节点里的字：中等字重，和面板正文一致 */
+.md-mermaid[data-look] svg .node :is(.nodeLabel, .label) {
+  font-weight: 500;
+}
+
+/* 类图、ER 图：方框里的分隔线和表格行跟着风格的描边色，行用极淡的斑马纹；类名加粗 */
+.md-mermaid[data-look] svg .node :is(.divider, .row-rect-odd, .row-rect-even) path[fill='none'] {
+  stroke: var(--mx-node-line) !important;
+  stroke-width: 1px !important;
+}
+.md-mermaid[data-look] svg .node .row-rect-odd path:not([fill='none']) {
+  fill: transparent !important;
+}
+.md-mermaid[data-look] svg .node .row-rect-even path:not([fill='none']) {
+  fill: color-mix(in srgb, var(--fg) 3.5%, transparent) !important;
+}
+.md-mermaid[data-look] svg .node .divider path:not([fill='none']) {
+  fill: var(--mx-node-a) !important;
+}
+.md-mermaid[data-look] svg :is(.label-group, .label.name) .nodeLabel {
+  font-weight: 600;
+}
+/* ER 图「零个」那头的小圆圈要空心，不能被上面的箭头规则填满 */
+.md-mermaid[data-look] svg marker circle {
+  fill: var(--md-pre-bg) !important;
+}
+
+/* 状态图：起点实心圆、终点同心圆都用连线色 */
+.md-mermaid[data-look] svg .node :is(circle.state-start, .state-end) {
+  fill: var(--mx-edge) !important;
+  stroke: var(--mx-edge) !important;
+}
+.md-mermaid[data-look] svg .node circle.state-end + circle,
+.md-mermaid[data-look] svg .node .end-state-inner {
+  fill: var(--mx-edge) !important;
+}
+
+/* 时序图：生命线是淡虚线，消息线和连线一样粗细，注释和激活条用风格自己的底色 */
+.md-mermaid[data-look] svg line.actor-line {
+  stroke: var(--mx-node-line) !important;
+  stroke-width: 1px !important;
+  stroke-dasharray: 3 4;
+}
+.md-mermaid[data-look] svg :is(.messageLine0, .messageLine1) {
+  stroke: var(--mx-edge) !important;
+  stroke-width: var(--md-mermaid-edge) !important;
+}
+.md-mermaid[data-look] svg rect.note {
+  filter: none !important;
+  fill: var(--mx-note-b) !important;
+  stroke: var(--mx-note-line) !important;
+  stroke-width: 1px !important;
+}
+.md-mermaid[data-look] svg rect[class^='activation'] {
+  fill: var(--mx-pick-b) !important;
+  stroke: var(--mx-pick-line) !important;
+  stroke-width: 1px !important;
+}
+.md-mermaid[data-look] svg :is(.noteText, text.actor) {
+  fill: var(--fg) !important;
+}
+.md-mermaid[data-look] svg .messageText {
+  fill: var(--muted) !important;
+}
+
+/* 甘特图：条是系列色的淡底 + 同色边（进行中蓝、已完成青、关键珊瑚），分区底只留极淡的一层 */
+.md-mermaid[data-look] svg rect.task {
+  fill: color-mix(in srgb, var(--mx-c0) 22%, var(--md-pre-bg)) !important;
+  stroke: var(--mx-c0) !important;
+  stroke-width: 1px !important;
+}
+.md-mermaid[data-look] svg rect.task[class*='done'] {
+  fill: color-mix(in srgb, var(--mx-c1) 22%, var(--md-pre-bg)) !important;
+  stroke: var(--mx-c1) !important;
+}
+.md-mermaid[data-look] svg rect.task[class*='active'] {
+  fill: color-mix(in srgb, var(--mx-c0) 38%, var(--md-pre-bg)) !important;
+}
+.md-mermaid[data-look] svg rect.task[class*='crit'] {
+  fill: color-mix(in srgb, var(--mx-c4) 22%, var(--md-pre-bg)) !important;
+  stroke: var(--mx-c4) !important;
+}
+.md-mermaid[data-look] svg :is(.taskText, .taskTextOutsideRight, .taskTextOutsideLeft) {
+  fill: var(--fg) !important;
+  font-size: 12px !important;
+}
+.md-mermaid[data-look] svg rect.section {
+  fill: transparent !important;
+}
+.md-mermaid[data-look] svg rect.section0 {
+  fill: color-mix(in srgb, var(--fg) 2.5%, transparent) !important;
+}
+.md-mermaid[data-look] svg .sectionTitle {
+  fill: var(--muted) !important;
+  font-weight: 600;
+}
+.md-mermaid[data-look] svg .today {
+  stroke: var(--mx-c4) !important;
+  stroke-width: 1.5px !important;
+  stroke-dasharray: 4 3;
+}
+
+/* 饼图：扇区用风格的系列色，扇区之间留一道底色缝；标题和图例用正文色 */
+.md-mermaid[data-look] svg .pieCircle {
+  stroke: var(--md-pre-bg) !important;
+  stroke-width: 2px !important;
+  opacity: 1 !important;
+}
+.md-mermaid[data-look] svg .pieOuterCircle {
+  stroke: none !important;
+}
+.md-mermaid[data-look] svg [data-c='0'] {
+  fill: var(--mx-c0) !important;
+}
+.md-mermaid[data-look] svg [data-c='1'] {
+  fill: var(--mx-c1) !important;
+}
+.md-mermaid[data-look] svg [data-c='2'] {
+  fill: var(--mx-c2) !important;
+}
+.md-mermaid[data-look] svg [data-c='3'] {
+  fill: var(--mx-c3) !important;
+}
+.md-mermaid[data-look] svg [data-c='4'] {
+  fill: var(--mx-c4) !important;
+}
+.md-mermaid[data-look] svg [data-c='5'] {
+  fill: var(--mx-c5) !important;
+}
+.md-mermaid[data-look] svg g.legend rect {
+  stroke: none !important;
+}
+.md-mermaid[data-look] svg text.slice {
+  fill: var(--md-pre-bg) !important;
+  font-size: 13px !important;
+  font-weight: 600;
+}
+.md-mermaid[data-look] svg .pieTitleText {
+  fill: var(--fg) !important;
+  font-size: 15px !important;
+  font-weight: 600;
+}
+.md-mermaid[data-look] svg g.legend text {
+  fill: var(--muted) !important;
+  font-size: 13px !important;
+}
+
+/* 只描边的线头：ER 图的鸟爪、类图继承的空心三角，填色会糊成一坨 */
+.md-mermaid[data-look] svg marker[id*='_er-'] path {
+  fill: none !important;
+}
+.md-mermaid[data-look] svg marker[id*='extension'] :is(path, polygon) {
+  fill: var(--md-pre-bg) !important;
+  stroke: var(--mx-edge) !important;
+}
+
+/* 饼图默认会撑满整个宽度，圆比正文还大一圈：限个宽 */
+.md-mermaid[data-look] svg[aria-roledescription='pie'] {
+  max-width: min(100%, 480px) !important;
+}

@@ -7,6 +7,7 @@ import { MD_ATTR } from './match';
 import { MdEditor, type FormatCmd } from './editor';
 import { renderMarkdown, toggleTask, type Heading } from './render';
 import { sanitizeMarkdownHtml } from './sanitize';
+import { Blocks } from './blocks';
 import { MD_CSS } from './style';
 import { MD_EDITOR_SIZES, MD_FONT_SIZES, MD_KEY, MD_WIDTHS, MD_WIDTH_MAX, MD_WIDTH_MIN, DEFAULT_MARKDOWN, normalizeMarkdown, saveMarkdown, stepIn, type MarkdownSettings, type MdTheme, type MdView } from './settings';
 import { SETTINGS_KEY, normalizeSettings, scheduleActive, siteModeFor } from '../shared/settings';
@@ -116,11 +117,14 @@ class MarkdownPage {
   private body = el('article', 'md-body');
   private status = el('footer', 'md-status');
   private renderTimer = 0;
+  private drawnTheme = '';
   private draftTimer = 0;
   /** 最近一次用户在哪一栏滚动：同步滚动只从这一栏带另一栏 */
   private scrollLead: 'editor' | 'preview' = 'editor';
   private syncing = false;
   private blocks: { line: number; el: HTMLElement }[] = [];
+  /** 代码块顶栏、Mermaid 图 */
+  private fx = new Blocks(this.body, () => this.resolvedTheme());
 
   constructor(source: string) {
     this.saved = source;
@@ -266,6 +270,9 @@ class MarkdownPage {
 
   private applyTheme(): void {
     const t = this.resolvedTheme();
+    // 图的配色是画的时候定的：主题变了要重画
+    if (this.drawnTheme && this.drawnTheme !== t) queueMicrotask(() => this.fx.redraw());
+    this.drawnTheme = t;
     this.app.classList.toggle('light', t === 'light');
     this.app.classList.toggle('sepia', t === 'sepia');
     document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';
@@ -275,7 +282,7 @@ class MarkdownPage {
 
   private applyPrefs(): void {
     this.applyTheme();
-    this.body.style.fontSize = `${this.s.fontSize}px`;
+    this.body.style.setProperty('--md-base', `${this.s.fontSize}px`);
     this.page.style.maxWidth = `${this.s.pageWidth}px`;
     this.app.style.setProperty('--md-editor-size', `${this.s.editorFontSize}px`);
     this.editor?.setFontSize(this.s.editorFontSize);
@@ -430,6 +437,7 @@ class MarkdownPage {
     const frag = sanitizeMarkdownHtml(r.html, location.href);
     if (!this.text.trim()) this.body.replaceChildren(el('p', 'md-empty', '空文件。点“编辑”开始写。'));
     else this.body.replaceChildren(frag);
+    this.fx.decorate();
     this.blocks = Array.from(this.body.querySelectorAll<HTMLElement>('[data-line]'))
       .map((e) => ({ line: Number(e.dataset.line), el: e }))
       .filter((b) => isFinite(b.line))
@@ -501,6 +509,7 @@ class MarkdownPage {
   // ---- 点击正文：任务框、页内锚点 ----
 
   private onBodyClick(e: MouseEvent): void {
+    if (this.fx.onClick(e)) return;
     const t = e.target as Element;
     const box = t.closest<HTMLElement>('.task-box[data-task]');
     if (box) {
