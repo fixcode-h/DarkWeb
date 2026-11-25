@@ -46,14 +46,6 @@ npm run build -- --zip
 const answer = 42; // 注释
 \`\`\`
 
-\`\`\`mermaid
-flowchart LR
-  A[打开] --> B{有图?}
-\`\`\`
-
-> [!TIP]
-> 拖动两侧边缘调宽度
-
 ## 开发计划
 
 - [x] 暗色引擎
@@ -65,6 +57,14 @@ flowchart LR
 MIT[^1]
 
 [^1]: 见 LICENSE 文件。
+
+\`\`\`mermaid
+flowchart LR
+  A[打开] --> B{有图?}
+\`\`\`
+
+> [!TIP]
+> 拖动两侧边缘调宽度
 
 <img src="x" onerror="window.__pwned = 1"><script>window.__pwned = 2</script>
 <a href="javascript:window.__pwned=3" id="evil">evil</a>
@@ -172,6 +172,7 @@ async function main() {
     await page.click('[data-act="edit"]');
     await page.waitForSelector('.cm-editor');
     check('切到分栏：编辑器和预览都在', (await page.isVisible('.cm-editor')) && (await page.isVisible('.md-preview')));
+    await page.waitForFunction(() => [...document.querySelectorAll('.cm-line')].some((l) => l.textContent === '- [x] Markdown 渲染与编辑'), null, { timeout: 3000 }).catch(() => {});
     check('勾选结果写回源码', (await editorText(page)).includes('- [x] Markdown 渲染与编辑'));
     await page.click('.cm-content');
     await page.keyboard.press('Control+End');
