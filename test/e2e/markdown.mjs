@@ -58,6 +58,14 @@ MIT[^1]
 
 [^1]: 见 LICENSE 文件。
 
+\`\`\`mermaid
+flowchart LR
+  A[打开] --> B{有图?}
+\`\`\`
+
+> [!TIP]
+> 拖动两侧边缘调宽度
+
 <img src="x" onerror="window.__pwned = 1"><script>window.__pwned = 2</script>
 <a href="javascript:window.__pwned=3" id="evil">evil</a>
 `;
@@ -114,12 +122,16 @@ async function main() {
     await page.waitForSelector('html[data-drak-md="render"] .md-body h1', { timeout: 8000 });
     check('识别纯文本 .md 并渲染', (await page.textContent('.md-body h1')) === 'Drak 暗色模式');
     check('暗色引擎让位', await page.evaluate(() => document.documentElement.hasAttribute('data-drak-off') && !document.documentElement.hasAttribute('data-drak-mode')));
-    check('默认深色主题', await page.evaluate(() => getComputedStyle(document.querySelector('.md-app')).backgroundColor) === 'rgb(23, 23, 23)');
+    check('默认深色主题', await page.evaluate(() => getComputedStyle(document.querySelector('.md-app')).backgroundColor) === 'rgb(38, 38, 36)');
     check('标签页标题是文件名', (await page.title()) === 'README.md');
     const toc = await page.$$eval('.md-toc a[data-id]', (as) => as.map((a) => a.textContent));
     check('目录列出标题', toc.join('|') === 'Drak 暗色模式|功能特性|按颜色角色重新配色|安装|开发计划|许可证', toc.join('|'));
     check('表格', (await page.$$('.md-body table td')).length === 9);
-    check('代码高亮', (await page.$$('.md-body pre[data-lang="js"] .hljs-keyword')).length > 0);
+    check('代码高亮', (await page.$$('.md-body .md-code[data-lang="js"] .hljs-keyword')).length > 0);
+    check('代码块顶栏和行号', (await page.textContent('.md-code[data-lang="bash"] .md-code-lang')) === 'bash · 3 行' && (await page.$$('.md-code[data-lang="bash"] .md-ln')).length === 3);
+    check('提示块', (await page.textContent('.md-alert[data-kind="tip"] .md-alert-title')) === '提示');
+    await page.waitForSelector('.md-mermaid[data-done]', { timeout: 15000 }).catch(() => {});
+    check('Mermaid 画成图', (await page.getAttribute('.md-mermaid', 'data-done')) === '1' && !!(await page.$('.md-mermaid .md-mermaid-svg svg .node')), await page.getAttribute('.md-mermaid', 'data-done'));
     check('任务列表', (await page.$$('.md-body .task-box')).length === 3 && (await page.$$('.md-body .task-box.checked')).length === 2);
     check('脚注', (await page.$$('.md-body .footnotes li')).length === 1);
     await page.waitForTimeout(200);
@@ -133,8 +145,24 @@ async function main() {
     check('目录高亮当前章节', (await page.textContent('.md-toc a.on')) === '安装');
 
     await page.click('[data-act="bigger"]');
-    check('A+ 增大字号并记住', (await page.evaluate(() => getComputedStyle(document.querySelector('.md-body')).fontSize)) === '17px' && (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.fontSize)) === 17);
+    check('A+ 增大字号并记住', (await page.evaluate(() => getComputedStyle(document.querySelector('.md-body')).fontSize)) === '18px' && (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.fontSize)) === 18);
     await page.click('[data-act="smaller"]');
+
+    // 栏宽：拖右侧边缘调节并记住，双击恢复默认
+    const pageW = () => page.evaluate(() => Math.round(document.querySelector('.md-page').getBoundingClientRect().width));
+    const grip = await page.locator('.md-grip.r').boundingBox();
+    const mid = await page.evaluate(() => { const r = document.querySelector('.md-preview').getBoundingClientRect(); return r.left + r.width / 2; });
+    await page.mouse.move(grip.x + grip.width / 2, 300);
+    await page.mouse.down();
+    await page.mouse.move(mid + 450, 320, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    const stored = await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.pageWidth);
+    check('拖动边缘调栏宽并记住', stored === 900 && Math.abs((await pageW()) - 900) <= 1 && (await page.textContent('[data-act="width"] span')) === '900');
+    await page.click('[data-act="width"]');
+    check('栏宽按钮跳到下一档', (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.pageWidth)) === 960);
+    await page.dblclick('.md-grip.r', { position: { x: 7, y: 300 } });
+    check('双击边缘恢复默认栏宽', (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.pageWidth)) === 1520);
 
     // 预览里勾任务框
     await page.click('.md-body .task-box:not(.checked)');
@@ -144,6 +172,7 @@ async function main() {
     await page.click('[data-act="edit"]');
     await page.waitForSelector('.cm-editor');
     check('切到分栏：编辑器和预览都在', (await page.isVisible('.cm-editor')) && (await page.isVisible('.md-preview')));
+    await page.waitForFunction(() => [...document.querySelectorAll('.cm-line')].some((l) => l.textContent === '- [x] Markdown 渲染与编辑'), null, { timeout: 3000 }).catch(() => {});
     check('勾选结果写回源码', (await editorText(page)).includes('- [x] Markdown 渲染与编辑'));
     await page.click('.cm-content');
     await page.keyboard.press('Control+End');

@@ -1,0 +1,192 @@
+/*
+ * 时序图样式（mermaid-seq.ts 在 .md-mermaid 上标 data-seq，在 SVG 里给参与者、消息标 data-p）。
+ * 参与者按从左到右取六种色相（--sq-0 … --sq-5，和 Markdown 那组色相一致），换配色、切深浅色自动跟着变。
+ * 写在 mermaid-looks.css 的整体风格之后，只管时序图特有的东西
+ */
+.md-mermaid[data-seq] {
+  --sq-0: var(--md-blue);
+  --sq-1: var(--md-violet);
+  --sq-2: var(--md-teal);
+  --sq-3: var(--md-gold);
+  --sq-4: var(--md-coral);
+  --sq-5: var(--md-gray);
+  --sq-bg: var(--md-pre-bg);
+}
+.md-mermaid[data-seq] svg [data-p='0'] {
+  --sq: var(--sq-0);
+}
+.md-mermaid[data-seq] svg [data-p='1'] {
+  --sq: var(--sq-1);
+}
+.md-mermaid[data-seq] svg [data-p='2'] {
+  --sq: var(--sq-2);
+}
+.md-mermaid[data-seq] svg [data-p='3'] {
+  --sq: var(--sq-3);
+}
+.md-mermaid[data-seq] svg [data-p='4'] {
+  --sq: var(--sq-4);
+}
+.md-mermaid[data-seq] svg [data-p='5'] {
+  --sq: var(--sq-5);
+}
+/* 关了「参与者着色」：一律中性灰，版式（序号、泳道、胶囊）照旧 */
+.md-mermaid[data-seq] svg [data-p='n'] {
+  --sq: color-mix(in srgb, var(--fg) 55%, var(--sq-bg));
+}
+
+/* 所有样式共用：消息文字用正文色（原来的灰字在深色下看不清），注释左边一道金色条、文字靠左 */
+.md-mermaid[data-seq] svg .messageText {
+  fill: var(--fg) !important;
+  font-size: var(--md-mermaid-seqText) !important;
+}
+.md-mermaid[data-seq] svg text.actor {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+.md-mermaid[data-seq] svg .noteText {
+  font-size: 13.5px !important;
+}
+.md-mermaid[data-seq] svg rect.note {
+  rx: 4px;
+  ry: 4px;
+}
+.md-mermaid[data-seq] svg .sq-note-bar {
+  fill: var(--mx-note-line);
+  stroke: none;
+}
+.md-mermaid[data-seq] svg line.actor-line {
+  stroke-dasharray: none;
+}
+
+/* 素净：一律中性色，只把对比度、对齐理顺；生命线实线、极淡 */
+.md-mermaid[data-seq='soft'] svg line.actor-line {
+  stroke: color-mix(in srgb, var(--fg) 12%, var(--sq-bg)) !important;
+}
+.md-mermaid[data-seq='soft'] svg .sq-note-bar {
+  fill: color-mix(in srgb, var(--md-gold) 75%, var(--sq-bg));
+}
+.md-mermaid[data-seq='soft'] svg rect.note {
+  fill: color-mix(in srgb, var(--md-gold) 6%, var(--sq-bg)) !important;
+  stroke: color-mix(in srgb, var(--md-gold) 22%, var(--sq-bg)) !important;
+}
+
+/* 彩色：参与者、它的生命线、它发出的消息同一个色相，一眼看出是谁在调谁 */
+.md-mermaid:is([data-seq='lane'], [data-seq='steps'], [data-seq='pill']) svg rect.actor[data-k] {
+  fill: color-mix(in srgb, var(--sq) 12%, var(--sq-bg)) !important;
+  stroke: color-mix(in srgb, var(--sq) 50%, var(--sq-bg)) !important;
+}
+.md-mermaid:is([data-seq='lane'], [data-seq='steps'], [data-seq='pill']) svg [data-p] > rect.actor[data-k] {
+  fill: color-mix(in srgb, var(--sq) 12%, var(--sq-bg)) !important;
+}
+.md-mermaid:is([data-seq='lane'], [data-seq='steps'], [data-seq='pill']) svg [data-p] text.actor {
+  fill: color-mix(in srgb, var(--sq) 70%, var(--fg)) !important;
+}
+.md-mermaid:is([data-seq='lane'], [data-seq='steps'], [data-seq='pill']) svg line.actor-line[data-p] {
+  stroke: color-mix(in srgb, var(--sq) 30%, var(--sq-bg)) !important;
+}
+.md-mermaid:is([data-seq='lane'], [data-seq='steps'], [data-seq='pill']) svg :is(.messageLine0, .messageLine1)[data-p] {
+  stroke: color-mix(in srgb, var(--sq) 75%, var(--sq-bg)) !important;
+}
+.md-mermaid:is([data-seq='lane'], [data-seq='steps'], [data-seq='pill']) svg marker[data-p] :is(path, circle) {
+  fill: color-mix(in srgb, var(--sq) 75%, var(--sq-bg)) !important;
+  stroke: none !important;
+}
+
+/* 泳道：每个参与者一列极淡的底色，长图往下翻也知道在谁的列里 */
+.md-mermaid[data-seq='lane'] svg .sq-lane {
+  fill: color-mix(in srgb, var(--sq) 4.5%, transparent);
+}
+.md-mermaid[data-seq='lane'] svg .sq-lane:nth-child(even) {
+  fill: color-mix(in srgb, var(--sq) 7%, transparent);
+}
+.md-mermaid[data-seq='lane'] svg rect.note {
+  fill: var(--card) !important;
+  stroke: var(--line) !important;
+}
+
+/* 步骤：每条消息起点一枚序号，文字贴着起点写；注释退成旁注，不再是一块块的底 */
+.md-mermaid[data-seq='steps'] svg .sq-step circle {
+  fill: color-mix(in srgb, var(--sq) 85%, var(--sq-bg));
+}
+.md-mermaid[data-seq='steps'] svg .sq-step text {
+  fill: var(--sq-bg);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--app-sans);
+}
+.md-mermaid[data-seq='steps'] svg rect.note {
+  fill: color-mix(in srgb, var(--fg) 3%, var(--sq-bg)) !important;
+  stroke: none !important;
+}
+.md-mermaid[data-seq='steps'] svg .noteText {
+  fill: var(--muted) !important;
+}
+.md-mermaid[data-seq='steps'] svg .sq-note-bar {
+  fill: color-mix(in srgb, var(--fg) 25%, var(--sq-bg));
+}
+
+/* 卡片：参与者和注释是浮起来的卡片，消息文字压在一枚同色胶囊里 */
+.md-mermaid[data-seq='pill'] svg rect.actor[data-k] {
+  fill: var(--card) !important;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.08)) drop-shadow(0 4px 10px rgb(0 0 0 / 0.06)) !important;
+}
+.md-mermaid[data-seq='pill'] svg [data-p] > rect.actor[data-k] {
+  fill: var(--card) !important;
+  stroke: color-mix(in srgb, var(--sq) 45%, var(--card)) !important;
+  stroke-width: 1.5px !important;
+}
+.md-mermaid[data-seq='pill'] svg .sq-pill {
+  fill: color-mix(in srgb, var(--sq) 9%, var(--sq-bg));
+  stroke: color-mix(in srgb, var(--sq) 30%, var(--sq-bg));
+  stroke-width: 1px;
+}
+.md-mermaid[data-seq='pill'] svg .sq-pill + .messageText {
+  fill: color-mix(in srgb, var(--sq) 55%, var(--fg)) !important;
+}
+.md-mermaid[data-seq='pill'] svg rect.note {
+  fill: var(--card) !important;
+  stroke: var(--line) !important;
+  filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.08)) !important;
+}
+.md-mermaid[data-seq='pill'] svg line.actor-line {
+  stroke-dasharray: 2 4;
+}
+
+/*
+ * 注释样式（设置里单独选，auto 跟着时序图样式走）：
+ * 色条 = 淡金底 + 左边金色条；整块 = 原来那种金色整块；旁注 = 没有框，灰字 + 左边一道灰条
+ */
+.md-mermaid[data-seq][data-seq-note='stripe'] svg rect.note {
+  fill: color-mix(in srgb, var(--md-gold) 6%, var(--sq-bg)) !important;
+  stroke: color-mix(in srgb, var(--md-gold) 22%, var(--sq-bg)) !important;
+  filter: none !important;
+}
+.md-mermaid[data-seq][data-seq-note='stripe'] svg .sq-note-bar {
+  fill: color-mix(in srgb, var(--md-gold) 75%, var(--sq-bg));
+}
+.md-mermaid[data-seq][data-seq-note='stripe'] svg .noteText {
+  fill: var(--fg) !important;
+}
+.md-mermaid[data-seq][data-seq-note='block'] svg rect.note {
+  fill: var(--mx-note-b) !important;
+  stroke: var(--mx-note-line) !important;
+  filter: none !important;
+}
+.md-mermaid[data-seq][data-seq-note='block'] svg .sq-note-bar {
+  fill: transparent;
+}
+.md-mermaid[data-seq][data-seq-note='block'] svg .noteText {
+  fill: var(--fg) !important;
+}
+.md-mermaid[data-seq][data-seq-note='aside'] svg rect.note {
+  fill: color-mix(in srgb, var(--fg) 3%, var(--sq-bg)) !important;
+  stroke: none !important;
+  filter: none !important;
+}
+.md-mermaid[data-seq][data-seq-note='aside'] svg .noteText {
+  fill: var(--muted) !important;
+}
+.md-mermaid[data-seq][data-seq-note='aside'] svg .sq-note-bar {
+  fill: color-mix(in srgb, var(--fg) 25%, var(--sq-bg));
+}
