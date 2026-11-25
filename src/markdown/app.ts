@@ -8,7 +8,7 @@ import { MdEditor, type FormatCmd } from './editor';
 import { renderMarkdown, toggleTask, type Heading } from './render';
 import { sanitizeMarkdownHtml } from './sanitize';
 import { MD_CSS } from './style';
-import { MD_EDITOR_SIZES, MD_FONT_SIZES, MD_KEY, MD_WIDTHS, normalizeMarkdown, saveMarkdown, stepIn, type MarkdownSettings, type MdTheme, type MdView } from './settings';
+import { MD_EDITOR_SIZES, MD_FONT_SIZES, MD_KEY, MD_WIDTHS, MD_WIDTH_MAX, MD_WIDTH_MIN, DEFAULT_MARKDOWN, normalizeMarkdown, saveMarkdown, stepIn, type MarkdownSettings, type MdTheme, type MdView } from './settings';
 import { SETTINGS_KEY, normalizeSettings, scheduleActive, siteModeFor } from '../shared/settings';
 
 const DRAFT_PREFIX = 'mdDraft:';
@@ -44,6 +44,7 @@ const ICON = {
   ul: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>',
   ol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 6h11M10 12h11M10 18h11M4 5l1.5-1v5M3.5 14.5a1.5 1.5 0 1 1 2.5 1.2L3.5 19H6.5"/></svg>',
   quote: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.2 17c-1.9 0-3.2-1.5-3.2-3.6C4 9.9 6.4 7.3 9.6 6l.7 1.2C8.4 8.2 7.4 9.6 7.2 11c1.6.1 2.8 1.3 2.8 3 0 1.7-1.2 3-2.8 3zm9 0c-1.9 0-3.2-1.5-3.2-3.6 0-3.5 2.4-6.1 5.6-7.4l.7 1.2c-1.9 1-2.9 2.4-3.1 3.8 1.6.1 2.8 1.3 2.8 3 0 1.7-1.2 3-2.8 3z"/></svg>',
+  width: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
   sync: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>',
 };
 
@@ -176,7 +177,7 @@ class MarkdownPage {
         <button type="button" data-act="smaller" title="减小字号">A−</button>
         <button type="button" data-act="bigger" title="增大字号">A+</button>
         <span class="md-sep" data-only="read"></span>
-        <button type="button" data-act="width" data-only="read" title="切换栏宽"></button>
+        <button type="button" data-act="width" data-only="read" class="md-wbtn">${ICON.width}<span></span></button>
         <button type="button" data-act="sync" data-only="split" title="分栏同步滚动">${ICON.sync}</button>
         <button type="button" data-act="theme" title="切换主题">${ICON.moon}</button>
       </div>
@@ -211,7 +212,7 @@ class MarkdownPage {
 
     this.status.innerHTML = '<span>Markdown · UTF-8</span><span data-s="pos">第 1 行，第 1 列</span><span data-s="sel"></span><span class="r" data-s="count"></span>';
 
-    this.page.appendChild(this.body);
+    this.page.append(this.body, this.grip('l'), this.grip('r'));
     this.preview.appendChild(this.page);
     this.main.append(this.toc, this.editorBox, this.preview);
     this.app.append(this.top, this.fmt, this.main, this.status);
@@ -275,7 +276,7 @@ class MarkdownPage {
   private applyPrefs(): void {
     this.applyTheme();
     this.body.style.fontSize = `${this.s.fontSize}px`;
-    this.page.style.maxWidth = `${this.s.width}px`;
+    this.page.style.maxWidth = `${this.s.pageWidth}px`;
     this.app.style.setProperty('--md-editor-size', `${this.s.editorFontSize}px`);
     this.editor?.setFontSize(this.s.editorFontSize);
     const q = (a: string) => this.top.querySelector<HTMLButtonElement>(`[data-act="${a}"]`)!;
@@ -286,11 +287,51 @@ class MarkdownPage {
     q('bigger').disabled = cur === sizes[sizes.length - 1];
     q('smaller').title = editing ? '减小编辑器字号' : '减小字号';
     q('bigger').title = editing ? '增大编辑器字号' : '增大字号';
-    const wi = MD_WIDTHS.indexOf(this.s.width as (typeof MD_WIDTHS)[number]);
-    q('width').textContent = ['窄', '中', '宽', '特宽'][wi] ?? '中';
+    q('width').querySelector('span')!.textContent = String(this.s.pageWidth);
+    q('width').title = `栏宽 ${this.s.pageWidth} px：点击切换档位，也可以拖动正文两侧边缘调节，双击边缘恢复默认`;
     q('toc').setAttribute('aria-pressed', String(this.s.toc));
     q('sync').setAttribute('aria-pressed', String(this.s.syncScroll));
     this.updateTocVisibility();
+  }
+
+  /** 正文两侧的拖动条：栏居中，所以宽度 = 指针到中线距离的两倍 */
+  private grip(side: 'l' | 'r'): HTMLElement {
+    const g = el('div', `md-grip ${side}`);
+    g.title = '拖动调节栏宽，双击恢复默认';
+    g.addEventListener('dblclick', () => this.updatePrefs({ pageWidth: DEFAULT_MARKDOWN.pageWidth }));
+    g.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      g.setPointerCapture(e.pointerId);
+      const r = this.preview.getBoundingClientRect();
+      const mid = r.left + r.width / 2;
+      const tip = el('div', 'md-wtip');
+      tip.style.left = `${mid}px`;
+      tip.style.top = `${r.top + 12}px`;
+      this.app.appendChild(tip);
+      this.app.classList.add('md-resizing');
+      let w = this.s.pageWidth;
+      const move = (ev: PointerEvent) => {
+        w = Math.round(Math.min(MD_WIDTH_MAX, Math.max(MD_WIDTH_MIN, Math.abs(ev.clientX - mid) * 2)) / 10) * 10;
+        this.page.style.maxWidth = `${w}px`;
+        // 窗口比设置窄时栏实际被压窄，提示里两个都写上
+        const real = Math.round(this.page.getBoundingClientRect().width);
+        tip.textContent = real < w ? `${w} px（当前窗口只放得下 ${real}）` : `${w} px`;
+      };
+      move(e);
+      const up = () => {
+        g.removeEventListener('pointermove', move);
+        g.removeEventListener('pointerup', up);
+        g.removeEventListener('pointercancel', up);
+        tip.remove();
+        this.app.classList.remove('md-resizing');
+        this.updatePrefs({ pageWidth: w });
+      };
+      g.addEventListener('pointermove', move);
+      g.addEventListener('pointerup', up);
+      g.addEventListener('pointercancel', up);
+    });
+    return g;
   }
 
   private updatePrefs(patch: Partial<MarkdownSettings>): void {
@@ -347,8 +388,9 @@ class MarkdownPage {
         return this.updatePrefs({ fontSize: stepIn(MD_FONT_SIZES, this.s.fontSize as (typeof MD_FONT_SIZES)[number], dir) });
       }
       case 'width': {
-        const i = MD_WIDTHS.indexOf(this.s.width as (typeof MD_WIDTHS)[number]);
-        return this.updatePrefs({ width: MD_WIDTHS[(i + 1) % MD_WIDTHS.length] });
+        // 拖出来的任意宽度也能接着点：跳到比它大的下一档，到头回第一档
+        const next = MD_WIDTHS.find((w) => w > this.s.pageWidth) ?? MD_WIDTHS[0];
+        return this.updatePrefs({ pageWidth: next });
       }
       case 'sync':
         return this.updatePrefs({ syncScroll: !this.s.syncScroll });

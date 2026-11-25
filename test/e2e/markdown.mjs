@@ -133,8 +133,24 @@ async function main() {
     check('目录高亮当前章节', (await page.textContent('.md-toc a.on')) === '安装');
 
     await page.click('[data-act="bigger"]');
-    check('A+ 增大字号并记住', (await page.evaluate(() => getComputedStyle(document.querySelector('.md-body')).fontSize)) === '17px' && (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.fontSize)) === 17);
+    check('A+ 增大字号并记住', (await page.evaluate(() => getComputedStyle(document.querySelector('.md-body')).fontSize)) === '18px' && (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.fontSize)) === 18);
     await page.click('[data-act="smaller"]');
+
+    // 栏宽：拖右侧边缘调节并记住，双击恢复默认
+    const pageW = () => page.evaluate(() => Math.round(document.querySelector('.md-page').getBoundingClientRect().width));
+    const grip = await page.locator('.md-grip.r').boundingBox();
+    const mid = await page.evaluate(() => { const r = document.querySelector('.md-preview').getBoundingClientRect(); return r.left + r.width / 2; });
+    await page.mouse.move(grip.x + grip.width / 2, 300);
+    await page.mouse.down();
+    await page.mouse.move(mid + 450, 320, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    const stored = await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.pageWidth);
+    check('拖动边缘调栏宽并记住', stored === 900 && Math.abs((await pageW()) - 900) <= 1 && (await page.textContent('[data-act="width"] span')) === '900');
+    await page.click('[data-act="width"]');
+    check('栏宽按钮跳到下一档', (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.pageWidth)) === 960);
+    await page.dblclick('.md-grip.r', { position: { x: 7, y: 300 } });
+    check('双击边缘恢复默认栏宽', (await sw.evaluate(async () => (await chrome.storage.local.get('markdown')).markdown.pageWidth)) === 1520);
 
     // 预览里勾任务框
     await page.click('.md-body .task-box:not(.checked)');

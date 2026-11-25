@@ -108,8 +108,19 @@ body { overflow: hidden; }
 .md-toc .stat { margin: 16px 10px 0; padding-top: 12px; border-top: 1px solid var(--edge); font-size: 12px; color: var(--subtle); line-height: 1.8; }
 .md-editor { flex: 1; min-width: 0; border-right: 1px solid var(--edge); background: var(--md-editor-bg); }
 .md-preview { flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; scroll-behavior: auto; }
-.md-page { margin: 0 auto; padding: 36px 32px 30vh; }
+.md-page { position: relative; margin: 0 auto; padding: 40px 48px 30vh; }
+/* 正文两侧的拖动条：平时只是透明的热区，悬停/拖动时显示一条细线 */
+.md-grip { position: absolute; top: 0; bottom: 0; width: 14px; cursor: col-resize; z-index: 2; touch-action: none; }
+.md-grip.l { left: 0; } .md-grip.r { right: 0; }
+.md-grip::after { content: ""; position: absolute; top: 0; bottom: 0; width: 2px; border-radius: 1px; background: var(--accent); opacity: 0; transition: opacity 120ms; }
+.md-grip.l::after { left: 0; } .md-grip.r::after { right: 0; }
+.md-grip:hover::after, .md-resizing .md-grip::after { opacity: .55; }
+.md-resizing, .md-resizing * { cursor: col-resize !important; user-select: none !important; }
+.md-wtip { position: fixed; transform: translateX(-50%); padding: 4px 10px; border-radius: 6px; background: var(--pop); border: 1px solid var(--edge); box-shadow: var(--shadow-pop); font-size: 12px; color: var(--muted); z-index: 5; pointer-events: none; }
+.md-bar .md-wbtn { display: inline-flex; gap: 4px; align-items: center; }
+.md-wbtn span { font-size: 12px; font-variant-numeric: tabular-nums; }
 .md-app[data-view="split"] .md-page { padding: 26px 34px 30vh; max-width: none !important; }
+.md-app:not([data-view="read"]) .md-grip { display: none; }
 .md-app[data-view="read"] .md-editor, .md-app[data-view="read"] .md-fmt, .md-app[data-view="read"] .md-status { display: none; }
 .md-app[data-view="source"] .md-preview, .md-app:not([data-view="read"]) .md-toc { display: none; }
 .md-app[data-view="source"] .md-editor { border-right: 0; }
@@ -201,7 +212,7 @@ body { overflow: hidden; }
 @media print {
   body { overflow: visible; }
   .md-app { position: static; display: block; background: #fff; color: #000; }
-  .md-top, .md-fmt, .md-toc, .md-editor, .md-status, .md-banner, .md-toast { display: none !important; }
+  .md-top, .md-fmt, .md-toc, .md-grip, .md-editor, .md-status, .md-banner, .md-toast { display: none !important; }
   .md-preview { overflow: visible; }
   .md-app[data-view] .md-preview { display: block !important; }
   .md-page { padding: 0; max-width: none !important; }

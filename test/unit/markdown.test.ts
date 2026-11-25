@@ -24,9 +24,23 @@ describe('Markdown：设置', () => {
     expect(normalizeMarkdown(undefined)).toEqual(DEFAULT_MARKDOWN);
     const s = normalizeMarkdown({ view: 'x', fontSize: 99, theme: 'neon', enabled: 'yes' });
     expect(s.view).toBe('read');
-    expect(s.fontSize).toBe(16);
+    expect(s.fontSize).toBe(17);
     expect(s.theme).toBe('auto');
     expect(s.enabled).toBe(true);
+  });
+  it('栏宽默认 1520，可以是任意值但限制在范围内', () => {
+    expect(DEFAULT_MARKDOWN.pageWidth).toBe(1520);
+    expect(normalizeMarkdown({ pageWidth: 1333.4 }).pageWidth).toBe(1333);
+    expect(normalizeMarkdown({ pageWidth: 100 }).pageWidth).toBe(560);
+    expect(normalizeMarkdown({ pageWidth: 99999 }).pageWidth).toBe(3200);
+    expect(normalizeMarkdown({ pageWidth: 'wide' }).pageWidth).toBe(1520);
+  });
+  it('旧设置升级：默认字号放大一档、旧栏宽不沿用，用户改过的字号保留', () => {
+    const old = normalizeMarkdown({ fontSize: 16, width: 760 });
+    expect(old.fontSize).toBe(17);
+    expect(old.pageWidth).toBe(1520);
+    expect(normalizeMarkdown({ fontSize: 20, width: 1040 }).fontSize).toBe(20);
+    expect(normalizeMarkdown({ fontSize: 16, pageWidth: 1200 }).fontSize).toBe(16);
   });
   it('关闭网络文件后只渲染本地文件', () => {
     const s = normalizeMarkdown({ remote: false });

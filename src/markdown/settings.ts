@@ -21,15 +21,18 @@ export interface MarkdownSettings {
   editorFontSize: number;
   /** 阅读字号 px */
   fontSize: number;
-  /** 正文栏宽 px */
-  width: number;
+  /** 正文栏宽 px（阅读视图，可拖动正文两侧边缘连续调节） */
+  pageWidth: number;
   /** auto：Drak 暗色生效时深色，否则跟随系统 */
   theme: MdTheme;
 }
 
 export const MD_KEY = 'markdown';
 export const MD_FONT_SIZES = [13, 14, 15, 16, 17, 18, 20, 22] as const;
-export const MD_WIDTHS = [680, 760, 880, 1040] as const;
+/** 栏宽按钮循环的几档；拖动边缘可以停在任意值 */
+export const MD_WIDTHS = [960, 1240, 1520, 1920] as const;
+export const MD_WIDTH_MIN = 560;
+export const MD_WIDTH_MAX = 3200;
 export const MD_EDITOR_SIZES = [12, 13, 14, 15, 16, 18] as const;
 
 export const DEFAULT_MARKDOWN: MarkdownSettings = {
@@ -40,13 +43,15 @@ export const DEFAULT_MARKDOWN: MarkdownSettings = {
   drafts: true,
   syncScroll: true,
   editorFontSize: 14,
-  fontSize: 16,
-  width: 760,
+  fontSize: 17,
+  pageWidth: 1520,
   theme: 'auto',
 };
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v ? (v as Record<string, unknown>) : {});
 const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
+const clampInt = (v: unknown, min: number, max: number, d: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(max, Math.max(min, v))) : d;
 const pick = <T>(v: unknown, list: readonly T[], d: T): T => (list.includes(v as T) ? (v as T) : d);
 
 export function normalizeMarkdown(raw: unknown): MarkdownSettings {
@@ -60,8 +65,9 @@ export function normalizeMarkdown(raw: unknown): MarkdownSettings {
     drafts: bool(r.drafts, d.drafts),
     syncScroll: bool(r.syncScroll, d.syncScroll),
     editorFontSize: pick(r.editorFontSize, MD_EDITOR_SIZES, d.editorFontSize),
-    fontSize: pick(r.fontSize, MD_FONT_SIZES, d.fontSize),
-    width: pick(r.width, MD_WIDTHS, d.width),
+    // 旧版本存的是 16px 默认字号和 width 字段；升级时字号跟着新默认放大一档，旧栏宽不再沿用
+    fontSize: r.pageWidth === undefined && r.fontSize === 16 ? d.fontSize : pick(r.fontSize, MD_FONT_SIZES, d.fontSize),
+    pageWidth: clampInt(r.pageWidth, MD_WIDTH_MIN, MD_WIDTH_MAX, d.pageWidth),
     theme: pick(r.theme, ['auto', 'dark', 'light', 'sepia'] as const, d.theme),
   };
 }
