@@ -22,6 +22,8 @@ const common = {
   minify: zip,
   sourcemap: zip ? false : 'inline',
   logLevel: 'warning',
+  // Markdown 页面的 Mermaid 样式表按文本打包进 markdown.js
+  loader: { '.css': 'text' },
   // 出包渠道（src/update/background.ts）：普通包 false；商店包在下面 buildStoreDir 里用 true 重新构建后台
   define: { __DRAK_STORE__: 'false' },
 };
@@ -50,6 +52,8 @@ await Promise.all([
   // Markdown 文件：检测脚本很小、每个页面都跑；渲染器（markdown-it、highlight.js、CodeMirror）只在 .md 页面由后台注入
   build({ ...common, entryPoints: [join(root, 'src/markdown/detect.ts')], outfile: join(dist, 'markdown-detect.js'), format: 'iife', sourcemap: false }),
   build({ ...common, entryPoints: [join(root, 'src/markdown/app.ts')], outfile: join(dist, 'markdown.js'), format: 'iife' }),
+  // Mermaid 画图库（约 5MB）：只在文件里真有 mermaid 代码块时才由后台注入；体积大，始终压缩、不带 sourcemap
+  build({ ...common, minify: true, sourcemap: false, entryPoints: [join(root, 'src/markdown/mermaid/entry.ts')], outfile: join(dist, 'markdown-mermaid.js'), format: 'iife' }),
   build({ ...common, entryPoints: [join(root, 'src/markdown/options.ts')], outfile: join(dist, 'markdown-options.js'), format: 'iife' }),
 ]);
 

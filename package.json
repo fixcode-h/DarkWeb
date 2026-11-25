@@ -1,6 +1,6 @@
 {
   "name": "darkweb",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": true,
   "description": "Drak：通用自适应暗色模式浏览器插件（Chrome / Edge MV3）",
   "type": "module",
@@ -30,6 +30,7 @@
     "highlight.js": "^11.12.0",
     "markdown-it": "^14.3.3",
     "markdown-it-footnote": "^4.0.0",
+    "mermaid": "^12.3.0",
     "mux.js": "^6.3.0",
     "playwright": "1.63.0",
     "typescript": "5.7.3",

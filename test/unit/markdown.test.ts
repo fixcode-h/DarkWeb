@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isMarkdownDocument, isMarkdownPath } from '../../src/markdown/match';
-import { countWords, renderMarkdown, slugify, toggleTask } from '../../src/markdown/render';
+import { countWords, lineSpans, renderMarkdown, slugify, toggleTask } from '../../src/markdown/render';
 import { DEFAULT_MARKDOWN, normalizeMarkdown, shouldRender, stepIn, MD_FONT_SIZES } from '../../src/markdown/settings';
 
 describe('Markdown：识别', () => {
@@ -24,9 +24,23 @@ describe('Markdown：设置', () => {
     expect(normalizeMarkdown(undefined)).toEqual(DEFAULT_MARKDOWN);
     const s = normalizeMarkdown({ view: 'x', fontSize: 99, theme: 'neon', enabled: 'yes' });
     expect(s.view).toBe('read');
-    expect(s.fontSize).toBe(16);
+    expect(s.fontSize).toBe(17);
     expect(s.theme).toBe('auto');
     expect(s.enabled).toBe(true);
+  });
+  it('栏宽默认 1520，可以是任意值但限制在范围内', () => {
+    expect(DEFAULT_MARKDOWN.pageWidth).toBe(1520);
+    expect(normalizeMarkdown({ pageWidth: 1333.4 }).pageWidth).toBe(1333);
+    expect(normalizeMarkdown({ pageWidth: 100 }).pageWidth).toBe(560);
+    expect(normalizeMarkdown({ pageWidth: 99999 }).pageWidth).toBe(3200);
+    expect(normalizeMarkdown({ pageWidth: 'wide' }).pageWidth).toBe(1520);
+  });
+  it('旧设置升级：默认字号放大一档、旧栏宽不沿用，用户改过的字号保留', () => {
+    const old = normalizeMarkdown({ fontSize: 16, width: 760 });
+    expect(old.fontSize).toBe(17);
+    expect(old.pageWidth).toBe(1520);
+    expect(normalizeMarkdown({ fontSize: 20, width: 1040 }).fontSize).toBe(20);
+    expect(normalizeMarkdown({ fontSize: 16, pageWidth: 1200 }).fontSize).toBe(16);
   });
   it('关闭网络文件后只渲染本地文件', () => {
     const s = normalizeMarkdown({ remote: false });
@@ -49,7 +63,33 @@ describe('Markdown：渲染', () => {
   });
   it('块级元素带源码行号', () => {
     expect(r.html).toMatch(/<h2 data-line="2"/);
-    expect(r.html).toMatch(/<pre class="code" data-line="9" data-lang="js">/);
+    expect(r.html).toMatch(/<div class="md-code" data-line="9" data-lang="js" data-lines="1">/);
+  });
+  it('代码块按行切开（行号用），跨行的高亮 span 在每行各自闭合', () => {
+    const out = renderMarkdown('```js\n/* a\nb */\nx\n```').html;
+    expect(out).toContain('data-lines="3"');
+    expect(out).toContain('<span class="md-ln"><span class="hljs-comment">/* a</span></span>');
+    expect(out).toContain('<span class="md-ln"><span class="hljs-comment">b */</span></span>');
+    expect(lineSpans('+a\n-b\n c', true).html).toBe('<span class="md-ln md-add">+a</span>\n<span class="md-ln md-del">-b</span>\n<span class="md-ln"> c</span>');
+  });
+  it('mermaid 代码块留给页面画图', () => {
+    const out = renderMarkdown('```mermaid\ngraph TD\nA-->B\n```').html;
+    expect(out).toContain('<div class="md-mermaid" data-line="0">');
+    expect(out).toContain('A--&gt;B');
+  });
+  it('提示块：> [!NOTE] 换成带标题的彩色块，普通引用不变', () => {
+    const out = renderMarkdown('> [!WARNING]\n> 小心 **这里**\n\n> 普通引用').html;
+    expect(out).toContain('<div class="md-alert" data-kind="warning"');
+    expect(out).toContain('<p class="md-alert-title">注意</p>');
+    expect(out).toContain('小心 <strong>这里</strong>');
+    expect(out).not.toContain('[!WARNING]');
+    expect(out).toMatch(/<blockquote data-line="3">/);
+  });
+  it('表格包一层；单独一张带说明的图加图注，一排徽章不加', () => {
+    expect(r.html).toContain('<div class="md-table"><table');
+    expect(renderMarkdown('| a | b |\n|:-:|--:|\n| 1 | 2 |').html).toContain('<td align="right">2</td>');
+    expect(renderMarkdown('![架构图](a.png)').html).toContain('<span class="md-cap">架构图</span>');
+    expect(renderMarkdown('![ci](a.svg) ![license](b.svg)').html).not.toContain('md-cap');
   });
   it('任务列表、表格、删除线、自动链接、代码高亮', () => {
     expect(r.html).toContain('class="task-box" data-task="6"');

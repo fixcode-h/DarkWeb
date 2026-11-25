@@ -8,7 +8,7 @@ const DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT'
 const ATTRS = new Set([
   'href', 'src', 'srcset', 'sizes', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan', 'lang', 'dir', 'datetime', 'cite', 'start', 'reversed',
   'align', 'valign', 'open', 'id', 'class', 'name', 'role', 'aria-checked', 'aria-hidden', 'controls', 'poster', 'loop', 'muted',
-  'data-line', 'data-task', 'data-lang',
+  'data-line', 'data-task', 'data-lang', 'data-lines', 'data-kind',
   'viewbox', 'd', 'fill', 'stroke', 'stroke-width', 'cx', 'cy', 'r', 'x', 'y', 'rx', 'ry', 'points', 'transform', 'xmlns',
 ]);
 const URL_ATTRS = new Set(['href', 'src', 'poster', 'cite']);

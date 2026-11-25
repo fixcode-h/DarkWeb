@@ -1,0 +1,326 @@
+/*
+ * mermaid（Markdown.tsx 画图、web/src/lib/mermaid-fx.ts 加动效和缩放）：顶栏 + 画布 + 收起的源码。
+ * 画布带一层随风格变的光晕（mermaid-looks.css 的 --mx-canvas-glow）和点阵底（设置里可关），图可以拖动、Ctrl+滚轮缩放、全屏看
+ */
+.md-body .md-mermaid {
+  position: relative;
+}
+/* 还没画（流式输出中或正在加载）：源码变淡，上面扫过一道光 */
+.md-body .md-mermaid:not([data-done]) {
+  position: relative;
+}
+.md-body .md-mermaid:not([data-done]) pre {
+  opacity: .5;
+}
+.md-body .md-mermaid:not([data-done])::after {
+  content: '';
+  pointer-events: none; position: absolute; inset: 0;
+  background: linear-gradient(
+      100deg,
+      transparent 30%,
+      color-mix(in srgb, var(--md-violet) 10%, transparent) 50%,
+      transparent 70%
+    )
+    0 0 / 200% 100%;
+  animation: md-shine 1.4s linear infinite;
+}
+@keyframes md-shine {
+  to {
+    background-position: -200% 0;
+  }
+}
+.md-body .md-mmd-canvas {
+  position: relative; cursor: grab; overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, var(--mx-canvas-glow, transparent), transparent 70%),
+    var(--md-mermaid-grid) 0 0 / 16px 16px;
+}
+.md-body .md-mmd-canvas[data-drag] {
+  cursor: grabbing;
+}
+.md-body .md-mermaid-svg {
+  display: flex; justify-content: center; overflow: visible; padding: 20px;
+  transform: translate(var(--mx, 0px), var(--my, 0px)) scale(var(--mz, 1));
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.md-body .md-mmd-canvas[data-drag] .md-mermaid-svg {
+  transition: none;
+}
+.md-body .md-mermaid-svg svg {
+  height: auto; max-width: 100%; overflow: visible;
+}
+/* 缩放按钮：一直在右下角，平时淡一点不抢图，鼠标移到图上变实 */
+.md-body .md-mmd-zoom {
+  position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 2px; border-radius: 8px; border: 1px solid var(--line-strong); padding: 2px; font-family: var(--sans); font-size: 12px; color: var(--muted); opacity: .6; box-shadow: 0 1px 2px rgb(0 0 0 / .08); transition: opacity 200ms;
+  background: var(--card);
+}
+.md-body .md-mmd-canvas:hover .md-mmd-zoom,
+.md-mmd-full .md-mmd-zoom {
+  opacity: 1;
+}
+.md-body .md-mmd-zoom button {
+  all: unset; box-sizing: border-box; text-align: center; min-width: 24px; cursor: pointer; border-radius: 6px; padding: 2px 4px;
+}
+.md-body .md-mmd-zoom span {
+  min-width: 40px; text-align: center; font-variant-numeric: tabular-nums;
+}
+.md-body .md-mermaid details {
+  border-top: 1px solid var(--line);
+}
+.md-body .md-mermaid summary {
+  display: flex; cursor: pointer; list-style: none; align-items: center; gap: 6px; padding: 6px 14px; font-family: var(--sans); font-size: 12.5px; color: var(--subtle); user-select: none;
+}
+.md-body .md-mermaid summary::-webkit-details-marker {
+  display: none;
+}
+.md-body .md-mermaid summary::before {
+  content: '›';
+  display: inline-block; font-size: 16px; line-height: 1; transition: rotate 200ms;
+}
+.md-body .md-mermaid details[open] summary::before {
+  rotate: 90deg;
+}
+.md-body .md-mermaid details pre {
+  border-top: 1px solid var(--line);
+}
+.md-body .md-mermaid details[open] pre {
+  animation: md-slide 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes md-slide {
+  from {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+/* 画不出来时：顶栏和原因标成危险色，下面是带行号的源码 */
+.md-body .md-mermaid[data-done='error'] .md-code-lang {
+  color: var(--md-coral);
+}
+.md-body .md-mermaid[data-done='error'] .md-code-lang::before {
+  background: var(--md-coral);
+}
+.md-body .md-mmd-why {
+  border-bottom: 1px solid var(--line); padding: 6px 14px; font-family: var(--sans); font-size: 12.5px;
+  color: var(--md-coral);
+  background: color-mix(in srgb, var(--md-coral) 8%, transparent);
+  animation: md-slide 0.3s both;
+}
+/* 图里的元素：圆角、细描边，字号跟面板 */
+.md-mermaid svg .node rect.basic,
+.md-mermaid svg rect.actor {
+  rx: var(--md-mermaid-radius);
+  ry: var(--md-mermaid-radius);
+}
+.md-mermaid svg rect.note {
+  rx: 6px;
+  ry: 6px;
+}
+.md-mermaid svg rect.task {
+  rx: 4px;
+  ry: 4px;
+}
+.md-mermaid svg .node polygon {
+  stroke-linejoin: round;
+}
+.md-mermaid svg .cluster rect {
+  rx: 12px !important;
+  ry: 12px !important;
+  stroke-dasharray: 4 4;
+  fill: color-mix(in srgb, var(--md-gold) 3%, transparent) !important;
+  stroke: color-mix(in srgb, var(--md-gold) 35%, transparent) !important;
+}
+.md-mermaid svg .cluster-label :is(span, p) {
+  color: var(--md-gold) !important;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.md-mermaid svg .labelBkg {
+  background: var(--md-pre-bg) !important;
+  border-radius: 4px;
+}
+.md-mermaid svg span.edgeLabel {
+  background: transparent !important;
+  color: var(--muted) !important;
+}
+.md-mermaid svg .edgeLabel rect {
+  opacity: 0 !important;
+}
+.md-mermaid svg :is(.messageText, .noteText, text.actor > tspan) {
+  font-size: 0.8125rem !important;
+}
+.md-mermaid svg .messageText {
+  fill: var(--fg) !important;
+}
+.md-mermaid svg .grid .tick line {
+  stroke: var(--line) !important;
+  opacity: 1 !important;
+}
+.md-mermaid svg .grid .tick text {
+  fill: var(--subtle) !important;
+}
+.md-mermaid svg .grid path.domain {
+  stroke: none !important;
+}
+.md-mermaid svg :is(.node rect, .node polygon, .node circle, .node path, rect.actor, rect.task, .commit) {
+  transition:
+    filter 0.2s,
+    stroke 0.2s,
+    opacity 0.25s;
+}
+.md-mermaid svg :is(.edgePaths path, .edgeLabel) {
+  transition:
+    stroke 0.2s,
+    opacity 0.25s,
+    stroke-width 0.2s;
+}
+/* 悬停一个节点：它和相连的节点、线高亮，线上跑虚线，其余变淡（设置里可关） */
+.md-mermaid svg.mx-focus :is(.mx-node, .mx-edge, .mx-label):not(.hot) {
+  opacity: 0.28;
+}
+.md-mermaid svg .mx-node.hot :is(rect, polygon, circle, path) {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--md-blue) 55%, transparent));
+  stroke: var(--md-blue) !important;
+}
+.md-mermaid svg .mx-edge.hot {
+  stroke: var(--md-blue) !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: 7 5 !important;
+  animation: mx-flow 0.8s linear infinite !important;
+}
+.md-mermaid svg :is(rect.task, .commit, rect.actor):hover {
+  filter: brightness(1.2) drop-shadow(0 0 6px color-mix(in srgb, var(--md-blue) 45%, transparent));
+}
+.md-mermaid svg .pieCircle {
+  cursor: pointer;
+  transition:
+    translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.3s;
+}
+.md-mermaid svg .pieCircle:hover {
+  translate: var(--dx, 0) var(--dy, 0);
+  filter: brightness(1.12) drop-shadow(0 4px 10px rgb(0 0 0 / 0.3));
+}
+/* 出场：节点依次浮现、线从头画到尾、饼图扇开、甘特条从左长出、时序消息一条条出现（设置里可关） */
+.md-mermaid.mx-in svg .mx-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mx-pop 0.55s cubic-bezier(0.2, 0.9, 0.25, 1.2) both;
+  animation-delay: calc(min(var(--i), 24) * 45ms);
+}
+.md-mermaid.mx-in svg .mx-edge {
+  stroke-dasharray: var(--len) var(--len);
+  animation: mx-draw 0.7s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: calc(180ms + min(var(--i), 24) * 45ms);
+}
+.md-mermaid.mx-in svg .mx-edge.dash {
+  stroke-dasharray: 3 3;
+  animation-name: mx-fade;
+}
+.md-mermaid.mx-in svg .mx-label {
+  animation: mx-fade 0.4s both;
+  animation-delay: calc(450ms + min(var(--i), 24) * 45ms);
+}
+.md-mermaid.mx-in svg .pieCircle {
+  transform-box: view-box;
+  animation: mx-pie 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+  animation-delay: calc(var(--i) * 70ms);
+}
+.md-mermaid.mx-in svg rect.task {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: mx-grow 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i) * 90ms);
+}
+.md-mermaid.mx-in svg .mx-seq {
+  animation: mx-fade 0.45s both;
+  animation-delay: calc(var(--i) * 140ms);
+}
+@keyframes mx-pop {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+    scale: 0.9;
+  }
+}
+@keyframes mx-draw {
+  from {
+    stroke-dashoffset: var(--len);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes mx-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes mx-pie {
+  from {
+    opacity: 0;
+    scale: 0.6;
+    rotate: -25deg;
+  }
+}
+@keyframes mx-grow {
+  from {
+    scale: 0 1;
+    opacity: 0.3;
+  }
+}
+@keyframes mx-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+/* 全屏看图：铺满整个窗口，顶栏中间「图形 / 源码」切换；图可以拖动和滚轮缩放 */
+.md-mmd-full {
+  pointer-events: auto; position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
+  background: var(--bg);
+  animation: mx-fade 0.18s both;
+}
+.md-mmd-full > .md-body {
+  display: flex; min-height: 0; flex: 1; flex-direction: column;
+}
+.md-mmd-full .md-mermaid {
+  margin-block: 0 !important; display: flex; height: 100%; min-height: 0; flex-direction: column; border-radius: 0; border: 0;
+}
+.md-mmd-full .md-code-bar {
+  position: relative; display: flex; padding: 8px 12px 8px 16px; font-size: 12.5px;
+}
+.md-mmd-full .md-mmd-canvas {
+  min-height: 0; flex: 1;
+}
+.md-mmd-full .md-mermaid-svg {
+  height: 100%; align-items: center;
+}
+.md-mmd-full[data-view='src'] .md-mmd-canvas,
+.md-mmd-full[data-view='graph'] .md-mmd-src {
+  display: none;
+}
+.md-mmd-full .md-mmd-src {
+  min-height: 0; flex: 1; overflow: auto;
+}
+.md-mmd-full .md-mmd-src pre {
+  min-height: 100%; padding-block: 16px;
+}
+/* 「图形 / 源码」：和 Segmented 同一套轨道、选中块，摆在顶栏正中 */
+.md-mmd-views {
+  position: absolute; top: 50%; left: 50%; display: inline-flex; transform: translate(-50%, -50%); border-radius: 8px; padding: 2px; font-family: var(--sans); background: var(--active);
+}
+.md-mmd-views button {
+  all: unset; height: 28px; cursor: pointer; border-radius: 6px; padding: 0 12px; font-size: 12.5px; color: var(--muted); transition: color 120ms;
+}
+.md-mmd-views button[aria-checked='true'] {
+  background: var(--pop); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .15); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-mermaid *,
+  .md-mmd-full * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.md-body .md-mmd-zoom button:hover { background: var(--active); color: var(--fg); }
+.md-body .md-mermaid summary:hover { color: var(--fg); }
+.md-mmd-views button:hover { color: var(--fg); }
