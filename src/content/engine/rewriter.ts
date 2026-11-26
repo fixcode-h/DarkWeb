@@ -229,6 +229,8 @@ export class SheetRewriter {
   ): Decl[] {
     const out: Decl[] = [];
     const done = new Set<string>();
+    // 渐变文字（background-clip: text）：背景其实画的是字，按文字提亮，不按背景压暗
+    const clipText = /\btext\b/.test(style.getPropertyValue('background-clip') + ' ' + style.getPropertyValue('-webkit-background-clip'));
     for (let i = 0; i < style.length; i++) {
       const prop = style[i];
       if (prop.startsWith('--')) {
@@ -256,8 +258,9 @@ export class SheetRewriter {
         }
         continue;
       }
-      const role = roleOf(prop);
+      let role = roleOf(prop);
       if (!role) continue;
+      if (clipText && role === 'bg') role = 'fg';
       let target = prop;
       let value = style.getPropertyValue(prop);
       if (value === '') {
@@ -332,6 +335,17 @@ export class SheetRewriter {
       if (!hits) return '';
       const name = hasCSS('CSS') && CSS.escape ? CSS.escape(kf.name) : kf.name;
       return `@keyframes ${name} {\n${body}}\n`;
+    }
+    // @property 注册的颜色变量：没有任何规则给它赋值时用的是初始值，影子变量也要从初始值算出来
+    if ('initialValue' in rule && 'syntax' in rule) {
+      const pr = rule as unknown as { name: string; syntax: string; initialValue: string | null };
+      if (!pr.initialValue || !/<color>/.test(pr.syntax)) return '';
+      let decls = '';
+      for (const role of ROLES) {
+        const r = this.value(pr.initialValue, role, opts.base);
+        if (r.hits > 0) decls += `${shadowVarName(role, pr.name)}:${r.text};`;
+      }
+      return decls ? `:root {${decls}}\n` : '';
     }
     // 分组规则：@media / @supports / @layer / @container / @scope ...
     const sub = (rule as CSSGroupingRule).cssRules;

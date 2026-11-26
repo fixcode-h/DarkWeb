@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>文字可读性</title>
+<style>
+  body { margin: 0; background: #fff; color: #222; font: 15px/1.6 sans-serif; }
+  section { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; }
+  .case { width: 280px; padding: 10px; border: 1px solid #e5e5e5; }
+  /* 1. JetBrains（RescUI）一类：颜色通道用 calc() + 变量算出来，主题系数不同时颜色不同 */
+  :root { --rs-color-black-t70: rgba(25,25,28,0.7); }
+  .rs { --k: var(--theme-dark, 0); }
+  .rs-link { color: rgb(calc(25 + var(--k, 0)*230), calc(25 + var(--k, 0)*230), calc(28 + var(--k, 0)*227)); }
+  .rs-soft { color: rgba(calc(25 + var(--k, 0)*230), calc(25 + var(--k, 0)*230), calc(28 + var(--k, 0)*227), var(--a, 0.7)); }
+  .rs-hsl { color: hsl(240 calc(5% + var(--k, 0)*1%) calc(10% + var(--k, 0)*80%)); }
+  .rs-dark { --theme-dark: 1; background: #19191c; }
+  /* 下拉菜单：点了才插入页面 */
+  .menu { position: absolute; top: 60px; right: 40px; width: 220px; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+  .menu a { display: block; padding: 8px 16px; text-decoration: none; color: rgba(calc(25 + var(--k, 0)*230), calc(25 + var(--k, 0)*230), calc(28 + var(--k, 0)*227), 0.7); }
+  .menu a.upload { color: #19191c; }
+  /* 2. color-mix、相对颜色语法 */
+  .mix { color: color-mix(in srgb, #19191c 70%, transparent); }
+  .mixvar { --ink: #333; color: color-mix(in srgb, var(--ink) 80%, white); }
+  .relative { color: rgb(from #000 r g b / 0.75); }
+  /* 3. 渐变文字 */
+  .grad { background: linear-gradient(90deg, #1e3a8a, #4c1d95); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 700; font-size: 22px; }
+  .grad2 { background-image: linear-gradient(90deg, #111, #444); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 22px; }
+  /* 4. 占位文字、禁用态 */
+  input { width: 240px; padding: 6px; border: 1px solid #ccc; background: #fff; color: #222; }
+  .ph::placeholder { color: #c0c4cc; }
+  .ph2::-webkit-input-placeholder { color: rgba(0,0,0,.35); }
+  button { padding: 6px 12px; border: 1px solid #dcdfe6; background: #f5f7fa; color: #333; }
+  button:disabled { color: #c0c4cc; background: #f5f7fa; }
+  /* 5. 伪元素里的文字 */
+  .pseudo::before { content: "伪元素文字"; color: #333; }
+  .pseudo-badge::after { content: "NEW"; margin-left: 4px; color: rgba(0,0,0,.6); }
+  /* 6. SVG 文字 */
+  .svg-css { fill: #2b2b2b; }
+  /* 7. 选中文字 */
+  .sel::selection { background: #b3d4fc; color: #000; }
+  /* 8. 半透明、次要文字 */
+  .muted { color: rgba(0,0,0,.45); }
+  .hint { color: #999; }
+  .op { color: #333; opacity: .6; }
+  /* 9. 下拉选择框 */
+  select { padding: 4px; border: 1px solid #ccc; background: #fff; color: #333; }
+  option { color: #333; }
+  /* 10. @property 注册的颜色变量，只用初始值 */
+  @property --brand-ink { syntax: '<color>'; inherits: true; initial-value: #2a2a2a; }
+  .prop { color: var(--brand-ink); }
+  /* 11. 系统颜色 */
+  .sys { color: CanvasText; }
+  .sysfield { color: FieldText; background: Field; }
+</style>
+</head>
+<body>
+<header class="rs rs-dark" style="height:56px;padding:0 24px;display:flex;align-items:center;justify-content:flex-end;gap:24px">
+  <a class="rs-link" href="#" id="hdr-link">Build Plugins</a>
+  <a class="rs-link" href="#" id="user" onclick="toggleMenu(event)">Hong Mr</a>
+</header>
+<section>
+  <div class="case rs"><a class="rs-link" id="rs-link" href="#">calc() 算出来的链接色</a></div>
+  <div class="case rs"><span class="rs-soft" id="rs-soft">calc() + 透明度变量</span></div>
+  <div class="case rs"><span class="rs-hsl" id="rs-hsl">hsl() 里的 calc()</span></div>
+  <div class="case"><span class="mix" id="mix">color-mix 半透明</span></div>
+  <div class="case"><span class="mixvar" id="mixvar">color-mix + 变量</span></div>
+  <div class="case"><span class="relative" id="relative">相对颜色语法</span></div>
+  <div class="case"><span class="grad" id="grad">渐变标题文字</span></div>
+  <div class="case"><span class="grad2" id="grad2">渐变文字（text-fill）</span></div>
+  <div class="case"><input class="ph" id="ph" placeholder="占位文字"></div>
+  <div class="case"><input class="ph2" id="ph2" placeholder="半透明占位文字"></div>
+  <div class="case"><input id="ph-default" placeholder="浏览器默认占位文字"></div>
+  <div class="case"><button id="btn-off" disabled>禁用按钮</button> <button id="btn-on">普通按钮</button></div>
+  <div class="case"><span class="pseudo" id="pseudo"></span><span class="pseudo-badge" id="pseudo-badge">标签</span></div>
+  <div class="case"><svg width="240" height="24"><text id="svg-default" x="0" y="18">SVG 默认填充</text></svg></div>
+  <div class="case"><svg width="240" height="24"><text id="svg-attr" x="0" y="18" fill="#333">SVG fill 属性</text></svg></div>
+  <div class="case"><svg width="240" height="24"><text id="svg-css" class="svg-css" x="0" y="18">SVG CSS 填充</text></svg></div>
+  <div class="case"><span class="sel" id="sel">可以选中的文字</span></div>
+  <div class="case"><span class="muted" id="muted">半透明次要文字</span></div>
+  <div class="case"><span class="hint" id="hint">浅灰提示文字</span></div>
+  <div class="case"><span class="op" id="op">半透明元素里的文字</span></div>
+  <div class="case"><select id="select"><option>选项一</option><option>选项二</option></select></div>
+  <div class="case"><span class="prop" id="prop">@property 初始值</span></div>
+  <div class="case"><span class="sys" id="sys">系统颜色 CanvasText</span></div>
+  <div class="case"><font color="#333" id="font">font 标签</font></div>
+</section>
+<script>
+  // 下拉菜单：点击后才插入页面（和 JetBrains Marketplace 的用户菜单一样）
+  function toggleMenu(e) {
+    e.preventDefault();
+    const old = document.querySelector('.menu');
+    if (old) return old.remove();
+    const m = document.createElement('div');
+    m.className = 'menu rs';
+    m.innerHTML = '<a href="#" id="m-profile">Profile</a><a href="#" class="upload" id="m-upload">Upload plugin</a><a href="#" id="m-orgs">Organizations</a><a href="#" id="m-signout">Sign out</a>';
+    document.body.appendChild(m);
+  }
+</script>
+</body>
+</html>

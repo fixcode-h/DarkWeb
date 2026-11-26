@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { contrastRatio, oklchToRgb, parseColor, rgbToOklch } from '../../src/content/engine/color';
 import { ColorTransformer, buildTheme, mapBgLightness, transformRgba } from '../../src/content/engine/transform';
 import { channelVarCandidates, rewriteValue, roleOfProperty, splitTopLevel } from '../../src/content/engine/css-value';
+import { dynamicColor, dynamicVarsCss, isRuntimeColor } from '../../src/content/engine/dynamic';
 
 const theme = buildTheme();
 const tx = () => new ColorTransformer(theme);
@@ -276,5 +277,35 @@ describe('multi-layer background-image', () => {
     expect(fixInitialLayers('initial, url("a.png")')).toBe('none, url("a.png")');
     expect(fixInitialLayers('initial')).toBe('initial');
     expect(fixInitialLayers('linear-gradient(red, blue)')).toBe('linear-gradient(red, blue)');
+  });
+});
+
+describe('运行时才知道的颜色（calc() / var() 通道、相对颜色）', () => {
+  it('通道由 calc() 算出的颜色包成相对颜色，交给浏览器按角色映射', () => {
+    const v = 'rgba(calc(25 + var(--k, 0)*230), calc(25 + var(--k, 0)*230), calc(28 + var(--k, 0)*227), 0.7)';
+    const r = rewriteValue(v, 'fg', tx());
+    expect(r.hits).toBe(1);
+    expect(r.text.startsWith(`oklch(from ${v} var(--drak-dyn-fg-l)`)).toBe(true);
+  });
+  it('相对颜色语法也包起来；能静态算出的颜色照旧静态改写', () => {
+    expect(rewriteValue('rgb(from #000 r g b / .75)', 'fg', tx()).text).toMatch(/^oklch\(from rgb\(from #000/);
+    expect(rewriteValue('rgb(25, 25, 28)', 'fg', tx()).text).toMatch(/^rgb/);
+    // 只有透明度是变量、或只存通道的变量，仍走原来的静态改写
+    expect(rewriteValue('rgb(255 255 255/var(--tw-bg-opacity))', 'bg', tx()).text).toMatch(/^rgb\(/);
+    expect(rewriteValue('hsl(var(--background))', 'bg', tx()).text).toMatch(/^var\(--drak-bg-hsl---background/);
+  });
+  it('isRuntimeColor 只认运行时才能确定的写法', () => {
+    expect(isRuntimeColor('calc(1 + 2), 0, 0')).toBe(true);
+    expect(isRuntimeColor('from #000 r g b')).toBe(true);
+    expect(isRuntimeColor('0, 0, 0')).toBe(false);
+  });
+  it('每处颜色只引用映射公式变量；公式按主题生成，括号配平、没有科学计数法', () => {
+    expect(dynamicColor('red', 'fg')).toBe('oklch(from red var(--drak-dyn-fg-l) var(--drak-dyn-fg-c) var(--drak-dyn-fg-h) / var(--drak-dyn-fg-a))');
+    for (const preset of ['default', 'black', 'warm'] as const) {
+      const css = dynamicVarsCss(buildTheme({ brightness: 50, contrast: 50, theme: preset, saturation: 30 }));
+      expect(css.split('(').length).toBe(css.split(')').length);
+      expect(css).not.toMatch(/\de-\d/);
+      for (const role of ['bg', 'fg', 'border', 'shadow']) for (const ch of 'lcha') expect(css).toContain(`--drak-dyn-${role}-${ch}:calc(`);
+    }
   });
 });
