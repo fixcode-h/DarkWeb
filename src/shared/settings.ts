@@ -115,7 +115,7 @@ export function splitSiteKey(key: string): [string, string] {
 }
 
 /** IP 或单段主机名（localhost、内网机器名）：没有“上级域名”可回退 */
-function isBareHost(name: string): boolean {
+export function isBareHost(name: string): boolean {
   return IPV4.test(name) || name.startsWith('[') || !name.includes('.');
 }
 

@@ -1,5 +1,6 @@
 /** 弹窗里的“网页翻译”一栏，独立于暗色模式的弹窗脚本 */
 import { LANGS } from './lang';
+import { isAutoSite, nextAutoSites } from './site-memory';
 import { ENGINE_NAMES, loadTranslate, saveTranslate, siteKeyOf, type EngineId, type PageStatus, type TranslateSettings } from './settings';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -7,6 +8,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 let settings: TranslateSettings;
 let tabId: number | undefined;
 let site = '';
+let url = '';
 let active = false;
 let poll = 0;
 
@@ -54,7 +56,8 @@ async function main(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
   try {
-    site = tab?.url && /^https?:/.test(tab.url) ? siteKeyOf(new URL(tab.url).host) : '';
+    url = tab?.url && /^https?:/.test(tab.url) ? tab.url : '';
+    site = url ? siteKeyOf(new URL(url).host) : '';
   } catch {
     site = '';
   }
@@ -68,7 +71,8 @@ async function main(): Promise<void> {
   engine.value = settings.engine;
   $<HTMLSelectElement>('trMode').value = settings.mode;
   const auto = $<HTMLInputElement>('trAuto');
-  auto.checked = !!site && settings.autoSites.includes(site);
+  // 自动翻译按主域名匹配：子域名也算在内
+  auto.checked = !!site && isAutoSite(settings.autoSites, url);
 
   const toggle = $<HTMLButtonElement>('trToggle');
   const fab = $<HTMLInputElement>('trFab');
@@ -86,16 +90,15 @@ async function main(): Promise<void> {
     await chrome.runtime.sendMessage({ type: 'tr:toggle', tabId });
     // 同域名自动翻译会把本站加入或移出自动翻译列表
     settings = await loadTranslate();
-    auto.checked = settings.autoSites.includes(site);
+    auto.checked = isAutoSite(settings.autoSites, url);
     await refresh();
   });
   target.addEventListener('change', () => save({ target: target.value }));
   engine.addEventListener('change', () => save({ engine: engine.value as EngineId }));
   $<HTMLSelectElement>('trMode').addEventListener('change', (e) => save({ mode: (e.target as HTMLSelectElement).value as TranslateSettings['mode'] }));
   auto.addEventListener('change', async () => {
-    const sites = settings.autoSites.filter((s) => s !== site);
-    if (auto.checked) sites.push(site);
-    await save({ autoSites: sites });
+    const sites = nextAutoSites(settings.autoSites, url, auto.checked);
+    if (sites) await save({ autoSites: sites });
     if (auto.checked && !active && tabId !== undefined) {
       await chrome.runtime.sendMessage({ type: 'tr:start', tabId });
       await refresh();

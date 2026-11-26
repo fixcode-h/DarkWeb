@@ -9,14 +9,13 @@ import {
   TRANSLATE_KEY,
   loadTranslate,
   normalizeTranslate,
-  siteKeyOf,
   type EngineId,
   type TranslateRequest,
   type TranslateResponse,
   type TranslateSettings,
   type TranslatedItem,
 } from './settings';
-import { rememberSite } from './site-memory';
+import { isAutoSite, rememberSite } from './site-memory';
 
 const CACHE_MAX = 5000;
 const CONCURRENCY = 4;
@@ -157,24 +156,16 @@ chrome.contextMenus?.onClicked.addListener((info, tab) => {
   if (info.menuItemId === MENU_ID && tab?.id !== undefined) void userToggle(tab.id);
 });
 
-// 自动翻译站点：页面加载完成后注入并开始
-let autoSites: Set<string> | null = null;
-async function getAutoSites(): Promise<Set<string>> {
-  autoSites ??= new Set((await loadTranslate()).autoSites);
+// 自动翻译站点：页面加载完成后注入并开始（按主域名匹配，子域名共用）
+let autoSites: string[] | null = null;
+async function getAutoSites(): Promise<string[]> {
+  autoSites ??= (await loadTranslate()).autoSites;
   return autoSites;
 }
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes[TRANSLATE_KEY]) autoSites = new Set(normalizeTranslate(changes[TRANSLATE_KEY].newValue).autoSites);
+  if (area === 'local' && changes[TRANSLATE_KEY]) autoSites = normalizeTranslate(changes[TRANSLATE_KEY].newValue).autoSites;
 });
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status !== 'complete' || !tab.url || !/^https?:/.test(tab.url)) return;
-  const sites = await getAutoSites();
-  if (!sites.size) return;
-  let host: string;
-  try {
-    host = new URL(tab.url).host;
-  } catch {
-    return;
-  }
-  if (sites.has(siteKeyOf(host))) await sendToTab(tabId, 'tr:start');
+  if (isAutoSite(await getAutoSites(), tab.url)) await sendToTab(tabId, 'tr:start');
 });
