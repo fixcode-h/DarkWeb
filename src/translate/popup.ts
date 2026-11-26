@@ -84,6 +84,9 @@ async function main(): Promise<void> {
   toggle.addEventListener('click', async () => {
     if (tabId === undefined) return;
     await chrome.runtime.sendMessage({ type: 'tr:toggle', tabId });
+    // 同域名自动翻译会把本站加入或移出自动翻译列表
+    settings = await loadTranslate();
+    auto.checked = settings.autoSites.includes(site);
     await refresh();
   });
   target.addEventListener('change', () => save({ target: target.value }));

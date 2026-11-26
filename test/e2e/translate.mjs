@@ -216,10 +216,36 @@ async function main() {
     await page.mouse.click(1255, fy);
     await page.waitForSelector('#p1 > font.drak-tr', { timeout: 8000 });
     check('侧边按钮：点一下翻译', true);
+    // ---- 同域名自动翻译（默认开启）：点了翻译就记住整个 IP:端口，显示原文则忘掉 ----
+    const autoList = () => sw.evaluate(async () => (await chrome.storage.local.get('translate')).translate.autoSites);
+    await page.waitForTimeout(300);
+    check('同域名：点翻译后本站加入自动翻译列表', (await autoList()).includes(`127.0.0.1:${port}`), JSON.stringify(await autoList()));
+    const page2 = await ctx.newPage();
+    await page2.goto(`${base}/another/page`);
+    await page2.waitForSelector('#p1 > font.drak-tr', { timeout: 5000 });
+    check('同域名：同一 IP:端口 下新开的页面自动翻译', true);
+    await page.bringToFront();
+    await page.mouse.move(1272, fy);
     await page.waitForTimeout(300);
     await page.mouse.click(1255, fy);
     await page.waitForFunction(() => !document.querySelector('font.drak-tr'));
     check('侧边按钮：再点一下显示原文', true);
+    await page.waitForTimeout(300);
+    check('同域名：显示原文后本站移出自动翻译列表', !(await autoList()).includes(`127.0.0.1:${port}`), JSON.stringify(await autoList()));
+    await page2.waitForFunction(() => !document.querySelector('font.drak-tr'), null, { timeout: 5000 });
+    check('同域名：同站点其他已打开的页面也还原', true);
+    await page2.close();
+    // 关掉开关后只翻译当前页，不记站点
+    await setTr({ sameSite: false });
+    await page.mouse.move(1272, fy);
+    await page.waitForTimeout(300);
+    await page.mouse.click(1255, fy);
+    await page.waitForSelector('#p1 > font.drak-tr', { timeout: 8000 });
+    await page.waitForTimeout(300);
+    check('同域名开关关闭：点翻译不加入自动翻译列表', (await autoList()).length === 0, JSON.stringify(await autoList()));
+    await page.mouse.click(1255, fy);
+    await page.waitForFunction(() => !document.querySelector('font.drak-tr'));
+    await setTr({ sameSite: true });
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(root, 'test-results', 'fab.png') });
 
