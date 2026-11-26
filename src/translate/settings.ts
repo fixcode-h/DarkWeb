@@ -20,6 +20,11 @@ export interface TranslateSettings {
   fallback: boolean;
   /** 打开即自动翻译的站点（域名或 IP:端口，不含 www.） */
   autoSites: string[];
+  /**
+   * 同域名自动翻译：手动点翻译时把本站记进 autoSites（同一域名或 IP 下的其他页面打开即翻译），
+   * 点“显示原文”时从里面去掉
+   */
+  sameSite: boolean;
   deeplKey: string;
   llm: LlmConfig;
   /** 页面侧边的翻译快捷按钮 */
@@ -46,6 +51,7 @@ export const DEFAULT_TRANSLATE: TranslateSettings = {
   style: 'dim',
   fallback: true,
   autoSites: [],
+  sameSite: true,
   deeplKey: '',
   llm: { baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini' },
   fab: { enabled: true, side: 'right', y: 0.62, hiddenSites: [] },
@@ -75,6 +81,7 @@ export function normalizeTranslate(raw: unknown): TranslateSettings {
     style: pick(r.style, ['plain', 'dim', 'underline', 'highlight'] as const, d.style),
     fallback: typeof r.fallback === 'boolean' ? r.fallback : d.fallback,
     autoSites: strings(r.autoSites),
+    sameSite: typeof r.sameSite === 'boolean' ? r.sameSite : d.sameSite,
     deeplKey: str(r.deeplKey, ''),
     llm: {
       baseUrl: str(llm.baseUrl, d.llm.baseUrl).trim() || d.llm.baseUrl,

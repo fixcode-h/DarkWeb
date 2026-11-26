@@ -16,6 +16,7 @@ import {
   type TranslateSettings,
   type TranslatedItem,
 } from './settings';
+import { rememberSite } from './site-memory';
 
 const CACHE_MAX = 5000;
 const CONCURRENCY = 4;
@@ -103,6 +104,12 @@ async function translate(req: TranslateRequest): Promise<TranslateResponse> {
 
 // ---- 注入与控制 ----
 
+/** 用户手动切换（侧边按钮、弹窗、快捷键、右键菜单）：切换后按设置记住或忘掉本站 */
+async function userToggle(tabId: number): Promise<void> {
+  await sendToTab(tabId, 'tr:toggle');
+  await rememberSite(tabId, (id) => sendToTab(id, 'tr:start')).catch(() => {});
+}
+
 async function sendToTab(tabId: number, type: 'tr:start' | 'tr:toggle'): Promise<void> {
   try {
     await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['translate.js'] });
@@ -119,11 +126,11 @@ chrome.runtime.onMessage.addListener((msg: { type?: string; tabId?: number; text
   }
   // 页面侧边按钮：作用于发消息的标签页
   if (msg?.type === 'tr:toggle-self' && sender.tab?.id !== undefined) {
-    sendToTab(sender.tab.id, 'tr:toggle').then(() => sendResponse({ ok: true }));
+    userToggle(sender.tab.id).then(() => sendResponse({ ok: true }));
     return true;
   }
   if ((msg?.type === 'tr:start' || msg?.type === 'tr:toggle') && typeof msg.tabId === 'number') {
-    sendToTab(msg.tabId, msg.type).then(() => sendResponse({ ok: true }));
+    (msg.type === 'tr:toggle' ? userToggle(msg.tabId) : sendToTab(msg.tabId, msg.type)).then(() => sendResponse({ ok: true }));
     return true;
   }
   return false;
@@ -133,7 +140,7 @@ chrome.runtime.onMessage.addListener((msg: { type?: string; tabId?: number; text
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== 'toggle-translate') return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id !== undefined) await sendToTab(tab.id, 'tr:toggle');
+  if (tab?.id !== undefined) await userToggle(tab.id);
 });
 
 // 右键菜单
@@ -147,7 +154,7 @@ function createMenu(): void {
 chrome.runtime.onInstalled.addListener(createMenu);
 chrome.runtime.onStartup.addListener(createMenu);
 chrome.contextMenus?.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === MENU_ID && tab?.id !== undefined) void sendToTab(tab.id, 'tr:toggle');
+  if (info.menuItemId === MENU_ID && tab?.id !== undefined) void userToggle(tab.id);
 });
 
 // 自动翻译站点：页面加载完成后注入并开始

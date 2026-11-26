@@ -33,6 +33,7 @@ function read(): TranslateSettings {
       model: $<HTMLInputElement>('llmModel').value.trim() || settings.llm.model,
     },
     autoSites: parseSites($<HTMLTextAreaElement>('autoSites').value),
+    sameSite: $<HTMLInputElement>('sameSite').checked,
     fab: {
       ...settings.fab,
       enabled: $<HTMLInputElement>('fabEnabled').checked,
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
   $<HTMLInputElement>('llmKey').value = settings.llm.apiKey;
   $<HTMLInputElement>('llmModel').value = settings.llm.model;
   $<HTMLTextAreaElement>('autoSites').value = settings.autoSites.join('\n');
+  $<HTMLInputElement>('sameSite').checked = settings.sameSite;
   $<HTMLInputElement>('fabEnabled').checked = settings.fab.enabled;
   $<HTMLTextAreaElement>('fabHidden').value = settings.fab.hiddenSites.join('\n');
   // 按钮在页面上被拖动、隐藏时，这里跟着刷新
@@ -96,6 +98,8 @@ async function main(): Promise<void> {
     settings = normalizeTranslate(changes[TRANSLATE_KEY].newValue);
     $<HTMLInputElement>('fabEnabled').checked = settings.fab.enabled;
     if (document.activeElement !== $('fabHidden')) $<HTMLTextAreaElement>('fabHidden').value = settings.fab.hiddenSites.join('\n');
+    // 页面上点翻译 / 显示原文会自动增删站点
+    if (document.activeElement !== $('autoSites')) $<HTMLTextAreaElement>('autoSites').value = settings.autoSites.join('\n');
   });
   for (const el of Array.from(document.querySelectorAll<Field>('select, input, textarea'))) el.addEventListener('change', () => void save());
   $('test').addEventListener('click', () => void test());
