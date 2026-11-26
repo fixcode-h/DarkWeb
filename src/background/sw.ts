@@ -163,7 +163,7 @@ async function loadImage(url: string): Promise<{ blob: Blob; svg: string | null 
   return { blob, svg: isSvg ? await blob.text() : null };
 }
 
-async function analyze(url: string, dimImages: boolean): Promise<ImageClass> {
+async function analyze(url: string, dimImages: boolean, backdrop: boolean): Promise<ImageClass> {
   const { blob, svg } = await loadImage(url);
   if (svg !== null) return classifySvgText(svg);
   const bmp = await createImageBitmap(blob);
@@ -175,7 +175,7 @@ async function analyze(url: string, dimImages: boolean): Promise<ImageClass> {
   g.drawImage(bmp, 0, 0, w, h);
   const stats = computeStats(g.getImageData(0, 0, w, h).data, w, h, bmp.width, bmp.height);
   bmp.close();
-  return classify(stats, dimImages);
+  return classify(stats, dimImages, backdrop);
 }
 
 function toBase64(buf: ArrayBuffer): string {
@@ -213,10 +213,10 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
       fetchCss(msg.url).then(sendResponse);
       return true;
     case 'analyze-image': {
-      const key = `${msg.dimImages ? 1 : 0}|${msg.url}`;
+      const key = `${msg.dimImages ? 1 : 0}${msg.backdrop ? 'b' : ''}|${msg.url}`;
       let p = imageCache.get(key);
       if (!p) {
-        p = analyze(msg.url, msg.dimImages).catch(() => 'keep' as ImageClass);
+        p = analyze(msg.url, msg.dimImages, !!msg.backdrop).catch(() => 'keep' as ImageClass);
         imageCache.set(key, p);
         if (imageCache.size > 3000) imageCache.delete(imageCache.keys().next().value!);
       }

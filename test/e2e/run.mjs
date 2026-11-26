@@ -437,6 +437,28 @@ async function main() {
         await setSettings({ siteModes: {} });
       }
       {
+        // 文字底图：单页应用晚渲染的浅色头图、小底图、半透明渐隐图、<img> 横幅都要压暗；普通商品图和按钮小图标不动
+        const page = await open(`http://127.0.0.1:${port}/backdrop`, 6000);
+        const r = await page.evaluate(() => {
+          const bg = (id) => getComputedStyle(document.getElementById(id)).backgroundImage;
+          const btnIcon = getComputedStyle(document.getElementById('btn'), '::before').backgroundImage;
+          return {
+            hd: bg('hd'), fade: bg('fade'), cat: bg('cat-on'), btnIcon,
+            banner: document.getElementById('banner-img').getAttribute('data-drak-img'),
+            goods: document.getElementById('goods-img').getAttribute('data-drak-img'),
+          };
+        });
+        const dimmed = (v) => v.startsWith('linear-gradient(rgba(0, 0, 0, 0.78)');
+        check('文字底图：晚渲染的浅色头图压暗', dimmed(r.hd), r.hd.slice(0, 60));
+        check('文字底图：底部渐隐的半透明头图压暗', dimmed(r.fade), r.fade.slice(0, 60));
+        check('文字底图：选中卡片的小底图压暗', dimmed(r.cat), r.cat.slice(0, 60));
+        check('文字底图：<img> 横幅按底图压暗', r.banner === 'backdrop', String(r.banner));
+        check('普通商品图不按底图处理', r.goods !== 'backdrop', String(r.goods));
+        check('按钮里的小图标不压暗', !dimmed(r.btnIcon), r.btnIcon.slice(0, 60));
+        await page.screenshot({ path: join(outDir, 'backdrop.png') });
+        await page.close();
+      }
+      {
         const page = await open(`http://127.0.0.1:${port}/hero`, 1800);
         const st = await state(page);
         const below = await page.evaluate(() => window.__t.info(document.querySelector('#content')).bgLum);
