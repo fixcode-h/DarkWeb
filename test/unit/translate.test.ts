@@ -4,6 +4,7 @@ import { engineLang, looksLikeIdentifier, looksLikeTarget, sameLang, worthTransl
 import { targetTop } from '../../src/translate/anchor';
 import { parseSites } from '../../src/translate/options';
 import { DEFAULT_TRANSLATE, normalizeTranslate, siteKeyOf } from '../../src/translate/settings';
+import { nextAutoSites } from '../../src/translate/site-memory';
 
 describe('翻译：语言判断', () => {
   it('已是目标语言的文字不再翻译', () => {
@@ -110,5 +111,20 @@ describe('翻译：保持阅读位置', () => {
   });
   it('段落整个在阅读线上方时不换算', () => {
     expect(targetTop({ top: -500, height: 200, line: 225 }, 50, true)).toBe(-500);
+  });
+});
+
+describe('同域名自动翻译', () => {
+  it('默认开启，旧设置没有这个字段时也按开启', () => {
+    expect(DEFAULT_TRANSLATE.sameSite).toBe(true);
+    expect(normalizeTranslate({}).sameSite).toBe(true);
+    expect(normalizeTranslate({ sameSite: false }).sameSite).toBe(false);
+  });
+  it('翻译时加入、显示原文时移除，没变化返回 null', () => {
+    expect(nextAutoSites(['a.com'], 'b.com', true)).toEqual(['a.com', 'b.com']);
+    expect(nextAutoSites(['a.com', 'b.com'], 'a.com', false)).toEqual(['b.com']);
+    expect(nextAutoSites(['a.com'], 'a.com', true)).toBeNull();
+    expect(nextAutoSites([], 'a.com', false)).toBeNull();
+    expect(nextAutoSites([], '', true)).toBeNull();
   });
 });
