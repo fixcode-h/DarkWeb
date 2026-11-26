@@ -23,3 +23,5 @@ node test/live/translate.mjs      # 用 Google 翻译真实页面，统计视口
 - Stack Overflow、npm、Medium、CSDN 等对无头浏览器返回 403 / 人机验证页，验不了。
 - 新浪、网易、百度、微博首页 DOMContentLoaded 本身要 5–10 秒（脚本多），首次上色晚是页面原因，期间有防闪白底色。
 - 百度首页（2026-11-14）：新版搜索框用 `background: linear-gradient(white, white) padding-box, transparent border-box` 画渐变描边，曾整块留白；输入框不设底色，曾显示成浏览器默认的 #3b3b3b 灰条，均已修。云端无头浏览器访问搜索结果页会被跳到验证码页，结果页只能本机验。
+- 链动小铺店铺页（wzyp.cn / ldxp.cn，2026-11-26）：云端访问被阿里云 ESA 滑块验证拦住，按用户截图在 `test/e2e` 的 `/backdrop` 页仿真。
+  头图、选中分类卡片是浅色背景图，文字提亮后成了浅底浅字；单页应用接口返回后才渲染头图，以前第一次没命中元素的背景图规则就再也不看。已改为“文字底图”按背景压暗、DOM 新增后重查。

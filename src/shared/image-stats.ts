@@ -54,9 +54,15 @@ export function computeStats(data: Uint8ClampedArray, width: number, height: num
   };
 }
 
-export function classify(s: ImageStats, dimImages: boolean): ImageClass {
+/**
+ * @param backdrop 图铺在文字后面当底图（见 content/backdrop.ts）：文字已经提亮，底图只要整体偏浅就得压暗，
+ *   不看尺寸（选中卡片的小底图）、不看透明（底部渐隐的头图），也不受“白底图降亮度”开关影响——这里压暗是为了文字能读。
+ */
+export function classify(s: ImageStats, dimImages: boolean, backdrop = false): ImageClass {
   // 透明底 + 深色单色图形：图标、公式、线稿
   if (s.transparent > 0.3 && s.lightness < 0.4 && s.colorfulness < 0.15) return 'invert';
+  // 文字底图：浅色、不是对比强烈的照片（照片上的文字页面自己会加描边或遮罩）
+  if (backdrop && s.transparent < 0.9 && s.lightness > 0.72 && s.spread < 0.3) return 'dim';
   // 大面积白底平涂图：截图、白底图表
   if (
     dimImages &&

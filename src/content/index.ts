@@ -373,6 +373,7 @@ class DynamicSession {
 
   private onMutations(root: Root, recs: MutationRecord[]): void {
     let dirty = false;
+    let added = false;
     for (const r of recs) {
       if (r.type === 'childList') {
         if ((r.target as Element).localName === 'style') dirty = true;
@@ -386,6 +387,7 @@ class DynamicSession {
             }
           }
           this.enqueue(el);
+          added = true;
         });
         r.removedNodes.forEach((n) => {
           const name = (n as Element).localName;
@@ -404,6 +406,7 @@ class DynamicSession {
         }
       }
     }
+    if (added) this.media.domChanged();
     // 样式表变化同步处理（仍在绘制之前），防止新内容闪白
     if (dirty) {
       this.markDirty(root);
