@@ -2,7 +2,7 @@ import type { ImageClass } from './image-stats';
 
 export type Request =
   | { type: 'fetch-css'; url: string }
-  | { type: 'analyze-image'; url: string; dimImages: boolean }
+  | { type: 'analyze-image'; url: string; dimImages: boolean; backdrop?: boolean }
   | { type: 'invert-image'; url: string }
   | { type: 'diag' }
   | { type: 'reapply' };

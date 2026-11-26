@@ -6,6 +6,7 @@ import { classify, computeStats, type ImageClass } from '../shared/image-stats';
 import type { AnalyzeResponse, InvertResponse } from '../shared/messages';
 import type { BgImageHit } from './engine/rewriter';
 import { isIgnored, type Ctx } from './context';
+import { isBgBackdrop, isImgBackdrop, naturalSize, pseudoOf } from './backdrop';
 import type { RootSheets } from './sheets';
 
 const ATTR = 'data-drak-img';
@@ -42,6 +43,13 @@ export class MediaAnalyzer {
   private io: IntersectionObserver;
   private tracked: WeakRef<Element>[] = [];
   private bgSeen = new Set<string>();
+  /**
+   * 样式表里有、但页面上还没有元素用到的背景图规则。单页应用（Vue / React）先加载样式表、
+   * 接口返回后才渲染出店铺头图这类元素，以前第一次没用到就再也不看，头图一直是浅色。
+   * DOM 有新增时再查一遍。
+   */
+  private pendingBg: { hit: BgImageHit; root: Document | ShadowRoot }[] = [];
+  private pendingTimer = 0;
   private bgCount = 0;
   private inlineSeen = new WeakSet<Element>();
   private active = 0;
@@ -82,14 +90,16 @@ export class MediaAnalyzer {
     }
     const url = img.currentSrc || img.src;
     if (!url) return;
+    const backdrop = isImgBackdrop(img);
     this.schedule(async () => {
-      const cls = await this.classifyImg(url, img);
+      const cls = await this.classifyImg(url, img, backdrop);
       if ((img.currentSrc || img.src) !== url) return;
       this.counts[cls]++;
       if (cls === 'keep') {
         if (img.hasAttribute(ATTR)) img.removeAttribute(ATTR);
       } else {
-        img.setAttribute(ATTR, cls);
+        // 文字底图压得比普通白底图更暗：普通白底图（截图）要看得清内容，底图要让上面的文字看得清
+        img.setAttribute(ATTR, backdrop && cls === 'dim' ? 'backdrop' : cls);
         this.tracked.push(new WeakRef(img));
       }
     });
@@ -111,21 +121,33 @@ export class MediaAnalyzer {
     else this.queue.push(run);
   }
 
-  private classifyImg(url: string, img: HTMLImageElement): Promise<ImageClass> {
-    let p = this.cache.get(url);
+  private classifyImg(url: string, img: HTMLImageElement, backdrop: boolean): Promise<ImageClass> {
+    const key = (backdrop ? 'b|' : '') + url;
+    let p = this.cache.get(key);
     if (!p) {
-      p = this.localClassify(img).then((local) => {
+      p = this.localClassify(img, backdrop).then((local) => {
         if (local) return local;
-        if (obviouslyKeep(url, img.naturalWidth, img.naturalHeight, this.ctx.settings.dimImages)) return 'keep';
-        return this.remoteClassify(url);
+        if (!backdrop && obviouslyKeep(url, img.naturalWidth, img.naturalHeight, this.ctx.settings.dimImages)) return 'keep';
+        return this.remoteClassify(url, backdrop);
       });
-      this.cache.set(url, p);
+      this.cache.set(key, p);
+    }
+    return p;
+  }
+
+  /** CSS 背景图分类（按是否文字底图分开缓存） */
+  private classifyBg(url: string, backdrop: boolean): Promise<ImageClass> {
+    const key = (backdrop ? 'b|' : '') + url;
+    let p = this.cache.get(key);
+    if (!p) {
+      p = this.remoteClassify(url, backdrop);
+      this.cache.set(key, p);
     }
     return p;
   }
 
   /** 同源 / data: / blob: 图片直接在本地采样；跨域图片会污染 canvas，返回 null 交给后台 */
-  private async localClassify(img: HTMLImageElement): Promise<ImageClass | null> {
+  private async localClassify(img: HTMLImageElement, backdrop: boolean): Promise<ImageClass | null> {
     const nw = img.naturalWidth;
     const nh = img.naturalHeight;
     if (!nw || !nh) return 'keep';
@@ -138,18 +160,41 @@ export class MediaAnalyzer {
       if (!g) return null;
       g.drawImage(img, 0, 0, w, h);
       const data = g.getImageData(0, 0, w, h).data;
-      return classify(computeStats(data, w, h, nw, nh), this.ctx.settings.dimImages);
+      return classify(computeStats(data, w, h, nw, nh), this.ctx.settings.dimImages, backdrop);
     } catch {
       return null;
     }
   }
 
-  private async remoteClassify(url: string): Promise<ImageClass> {
+  /** 不经后台直接采样：data: / blob: / 同源图片可以；跨域图片画上画布后读不出像素，返回 null */
+  private async classifyUrlLocal(url: string, backdrop: boolean): Promise<ImageClass | null> {
+    let same = false;
+    try {
+      const u = new URL(url, location.href);
+      same = u.protocol === 'data:' || u.protocol === 'blob:' || u.origin === location.origin;
+    } catch {
+      return null;
+    }
+    if (!same || /^data:image\/svg|\.svg(\?|#|$)/i.test(url)) return null;
+    const img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+    } catch {
+      return null;
+    }
+    return this.localClassify(img, backdrop);
+  }
+
+  private async remoteClassify(url: string, backdrop = false): Promise<ImageClass> {
+    // data: / 同源图片在本地就能采样（打包进样式表的小底图多半是 data: URL，以前一律当作不处理）
+    const local = await this.classifyUrlLocal(url, backdrop);
+    if (local) return local;
     if (!/^https?:/i.test(url)) return 'keep';
     await pageLoaded();
     if (this.stopped) return 'keep';
     try {
-      const res = (await chrome.runtime.sendMessage({ type: 'analyze-image', url, dimImages: this.ctx.settings.dimImages })) as AnalyzeResponse;
+      const res = (await chrome.runtime.sendMessage({ type: 'analyze-image', url, dimImages: this.ctx.settings.dimImages, backdrop })) as AnalyzeResponse;
       return res?.ok && res.cls ? res.cls : 'keep';
     } catch {
       return 'keep';
@@ -163,35 +208,59 @@ export class MediaAnalyzer {
     if (this.bgSeen.has(key)) return;
     this.bgSeen.add(key);
     // 推迟到空闲时，避免拖慢首屏
-    const idle = (cb: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(cb, { timeout: 3000 }) : setTimeout(cb, 200));
-    idle(() =>
-      this.ctx.guard.run('bg-img', () => {
-        let used = true;
-        try {
-          used = !!root.querySelector(hit.selector.replace(/::?(before|after|first-line|first-letter|placeholder|marker|selection|-webkit-[\w-]+)/g, ''));
-        } catch {
-          used = true;
-        }
-        if (!used || this.bgCount >= MAX_BG_ANALYSIS) return;
-        this.bgCount++;
-        this.schedule(async () => {
-          let p = this.cache.get(hit.url);
-          if (!p) {
-            p = this.remoteClassify(hit.url);
-            this.cache.set(hit.url, p);
-          }
-          const cls = await p;
-          if (cls === 'dim') {
-            // 大面积浅色背景图（如 B 站动态页底图）：叠一层半透明黑压暗，不动图本身
-            this.rootOf(root)?.addPatch(hit, dimmedBg(hit.url));
-            return;
-          }
-          if (cls !== 'invert') return;
-          const res = (await chrome.runtime.sendMessage({ type: 'invert-image', url: hit.url })) as InvertResponse;
-          if (res?.ok && res.dataUrl) this.rootOf(root)?.addPatch(hit, `url("${res.dataUrl}")`);
-        });
-      }),
-    );
+    idle(() => this.ctx.guard.run('bg-img', () => this.checkBg(hit, root)));
+  }
+
+  /** 选择器在页面上有没有命中元素；没命中的先挂起，等 DOM 有新增再查 */
+  private checkBg(hit: BgImageHit, root: Document | ShadowRoot): void {
+    if (this.stopped || this.bgCount >= MAX_BG_ANALYSIS) return;
+    const pseudo = pseudoOf(hit.selector);
+    let els: Element[] = [];
+    let valid = true;
+    try {
+      const sel = hit.selector.replace(/::?(before|after|first-line|first-letter|placeholder|marker|selection|-webkit-[\w-]+)/g, '');
+      els = Array.from(root.querySelectorAll(sel)).slice(0, 8);
+    } catch {
+      valid = false;
+    }
+    if (valid && !els.length) {
+      if (this.pendingBg.length < 500) this.pendingBg.push({ hit, root });
+      return;
+    }
+    this.bgCount++;
+    this.schedule(async () => {
+      // 文字底图要先拿到图的原始尺寸，判断 background-size: auto 时图铺开了多大
+      let backdrop = false;
+      if (els.length) {
+        const natural = await naturalSize(hit.url);
+        backdrop = els.some((el) => el.isConnected && isBgBackdrop(el, pseudo, natural));
+      }
+      const cls = await this.classifyBg(hit.url, backdrop);
+      if (this.stopped) return;
+      if (cls === 'dim') {
+        // 大面积浅色背景图（如 B 站动态页底图）、文字底图：叠一层半透明黑压暗，不动图本身
+        this.rootOf(root)?.addPatch(hit, dimmedBg(hit.url));
+        return;
+      }
+      if (cls !== 'invert') return;
+      const res = (await chrome.runtime.sendMessage({ type: 'invert-image', url: hit.url })) as InvertResponse;
+      if (res?.ok && res.dataUrl) this.rootOf(root)?.addPatch(hit, `url("${res.dataUrl}")`);
+    });
+  }
+
+  /** DOM 有新增元素：过一会儿把挂起的背景图规则再查一遍（合并成一次，不在每批变更里都查） */
+  domChanged(): void {
+    if (this.stopped || !this.pendingBg.length || this.pendingTimer) return;
+    this.pendingTimer = window.setTimeout(() => {
+      this.pendingTimer = 0;
+      const list = this.pendingBg;
+      this.pendingBg = [];
+      idle(() =>
+        this.ctx.guard.run('bg-img', () => {
+          for (const { hit, root } of list) this.checkBg(hit, root);
+        }),
+      );
+    }, 400);
   }
 
   /** 内联背景图：分类后通过 apply 写回 background-image */
@@ -200,12 +269,10 @@ export class MediaAnalyzer {
     this.inlineSeen.add(el);
     this.bgCount++;
     this.schedule(async () => {
-      let p = this.cache.get(url);
-      if (!p) {
-        p = this.remoteClassify(url);
-        this.cache.set(url, p);
-      }
-      const cls = await p;
+      // 等一个空闲再量几何：内联样式往往在元素插进页面的同一批变更里处理，这时文字可能还没排版
+      await new Promise<void>((r) => idle(r));
+      const backdrop = el.isConnected && isBgBackdrop(el, null, await naturalSize(url));
+      const cls = await this.classifyBg(url, backdrop);
       if (this.stopped || !el.isConnected) return;
       if (cls === 'dim') {
         apply(dimmedBg(url));
@@ -218,10 +285,17 @@ export class MediaAnalyzer {
 
   stop(): void {
     this.stopped = true;
+    clearTimeout(this.pendingTimer);
+    this.pendingBg = [];
     this.io.disconnect();
     for (const ref of this.tracked) ref.deref()?.removeAttribute(ATTR);
     this.tracked = [];
   }
+}
+
+function idle(cb: () => void): void {
+  if ('requestIdleCallback' in window) requestIdleCallback(cb, { timeout: 3000 });
+  else setTimeout(cb, 200);
 }
 
 /** 大面积浅色背景图：叠一层半透明黑压暗，不动图本身 */
@@ -235,7 +309,9 @@ export function mediaCss(invertSelectors: string[], imageBrightness = 100): stri
   const b = Math.min(100, Math.max(30, imageBrightness)) / 100;
   let css =
     `[${ATTR}="invert"]{filter:invert(1) hue-rotate(180deg) !important}\n` +
-    `[${ATTR}="dim"]{filter:brightness(${round2(0.8 * b)}) contrast(1.1) !important}\n`;
+    `[${ATTR}="dim"]{filter:brightness(${round2(0.8 * b)}) contrast(1.1) !important}\n` +
+    // 文字底图：压到和深色背景同一档，上面提亮后的文字才读得清
+    `[${ATTR}="backdrop"]{filter:brightness(${round2(0.22 * b)}) !important}\n`;
   // 不加 !important、用 :where 压低优先级：页面自己给图片设的滤镜优先
   if (b < 1) css += `:where(img:not([${ATTR}])){filter:brightness(${round2(b)})}\n`;
   for (const sel of invertSelectors) css += `${sel}{filter:invert(1) hue-rotate(180deg) !important}\n`;

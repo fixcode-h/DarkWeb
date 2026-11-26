@@ -54,6 +54,13 @@ const IMAGES = {
   // 透明底黑色图标
   'glyph.png': png(32, 32, (x, y) => ((x - 16) ** 2 + (y - 16) ** 2 < 100 ? [20, 20, 20, 255] : [0, 0, 0, 0])),
   // 二维码：黑白方块
+  // 浅色渐变底图（店铺头图、选中卡片的底图）：大图、小图、底部渐隐的半透明图各一张
+  'pastel.png': png(800, 240, (x) => [232 + Math.round((20 * x) / 800), 240 + Math.round((10 * x) / 800), 255, 255]),
+  'pastel-small.png': png(150, 50, (x) => [232 + Math.round((20 * x) / 150), 240 + Math.round((10 * x) / 150), 255, 255]),
+  'pastel-fade.png': png(800, 240, (x, y) => [232 + Math.round((20 * x) / 800), 240, 255, Math.round(255 * Math.max(0, 1 - (y / 240) * 1.3))]),
+  'pastel-img.png': png(600, 200, (x) => [236, 242 + Math.round((10 * x) / 600), 255, 255]),
+  // 白色小图标（按钮里的 ::before 图标）
+  'white-icon.png': png(16, 16, () => [255, 255, 255, 255]),
   'qr.png': png(120, 120, (x, y) => (((Math.floor(x / 10) * 7 + Math.floor(y / 10) * 13) % 3 === 0) ? [0, 0, 0, 255] : [255, 255, 255, 255])),
 };
 
@@ -115,6 +122,34 @@ export function startServer() {
           `<!doctype html><html><head><style>${css}</style><link rel="stylesheet" href="http://s2.hdslb.com:${port}/guard.css"></head><body>` +
             '<div class="tw" id="tw">Tailwind v3</div><div class="ok" id="ok">oklch</div><div class="sh" id="sh">shadcn</div><div class="sha" id="sha">shadcn 半透明</div>' +
             '<div class="ge" id="ge">Geist</div><div class="twc" id="twc">Tailwind 通道变量</div><div class="gd" id="gd">防盗链 CDN 样式表</div></body></html>',
+        );
+      }
+      // 文字底图（链动小铺店铺页一类单页应用）：浅色头图等接口返回才渲染、选中卡片用小底图、
+      // 绝对定位的 <img> 当横幅底图、底部渐隐的半透明头图；对照组：商品卡片的普通图片、按钮里的小图标
+      if (url.pathname === '/backdrop') {
+        const css = [
+          'body{margin:0;background:#fff;color:#1d2129;font:14px sans-serif}',
+          '.hd{height:200px;padding:24px;background:url(/img/pastel.png) center/cover}',
+          '.fade{height:160px;padding:24px;background:url(/img/pastel-fade.png) no-repeat center top/100% auto}',
+          '.cat{display:inline-block;width:150px;height:50px;margin:12px;border:1px solid #e5e6eb}',
+          '.cat.on{background:url(/img/pastel-small.png) 0 0/100% 100% no-repeat}',
+          '.banner{position:relative;height:160px;padding:24px}',
+          '.banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-1}.banner{z-index:0}',
+          '.goods{width:200px;margin:12px}.goods img{display:block;width:200px;height:120px}',
+          '.btn{display:inline-block;padding:6px 12px;background:#165dff;color:#fff}',
+          '.btn::before{content:"";display:inline-block;width:16px;height:16px;margin-right:4px;background:url(/img/white-icon.png)}',
+        ].join('');
+        const app =
+          '<div class="hd" id="hd"><h1>Clarke AI 商城</h1><p>店铺公告：晚上 23:00 到早上 9:00 休息</p></div>' +
+          '<div class="fade" id="fade"><p>底部渐隐的头图</p></div>' +
+          '<div class="cat on" id="cat-on">G.P.T 成品号</div><div class="cat">G.P.T 直充</div>' +
+          '<div class="banner" id="banner"><img id="banner-img" src="/img/pastel-img.png"><p>横幅上的文字</p></div>' +
+          '<div class="goods"><img id="goods-img" src="/img/pastel-img.png"><p>商品标题</p></div>' +
+          '<span class="btn" id="btn">联系TA</span>';
+        return send(
+          'text/html; charset=utf-8',
+          `<!doctype html><html><head><style>${css}</style></head><body><div id="app"></div>` +
+            `<script>setTimeout(()=>{document.getElementById('app').innerHTML=${JSON.stringify(app)}},1500)</script></body></html>`,
         );
       }
       if (url.pathname === '/plain') {
