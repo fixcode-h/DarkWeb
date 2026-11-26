@@ -3,6 +3,7 @@
  * 不认识的内容原样保留。
  */
 import { isNamedColor } from './color';
+import { dynamicColor, isRuntimeColor } from './dynamic';
 import type { ColorTransformer, Role } from './transform';
 
 export const SHADOW_VAR_PREFIX = '--drak-';
@@ -256,6 +257,8 @@ export function rewriteValue(value: string, role: Role, tx: ColorTransformer, ba
             const m = t && /var\(\s*(--[\w-]+)/.exec(inner);
             if (m) (res.vars ??= []).push(m[1]);
           }
+          // 通道是 calc() / var() 算出来的、或相对颜色语法：交给浏览器在运行时按同样的规则映射
+          if (!t && isRuntimeColor(inner)) t = dynamicColor(whole, role);
           if (t) {
             out += t;
             res.hits++;

@@ -3,10 +3,13 @@
  * 原值记在 WeakMap 里，关闭时逐个还原。
  */
 import { isIgnored, type Ctx } from './context';
+import { parseColor, relativeLuminance } from './engine/color';
 
 type Orig = Map<string, [string, string]>;
 
 const SVG_ATTRS = ['fill', 'stroke', 'stop-color'] as const;
+/** 填充色就是文字颜色的 SVG 元素 */
+const SVG_TEXT = new Set(['text', 'tspan', 'textPath']);
 
 export class InlineStyler {
   private originals = new WeakMap<Element, Orig>();
@@ -30,7 +33,8 @@ export class InlineStyler {
     const svg = el instanceof SVGElement;
     const hasLegacy = !svg && (el.hasAttribute('bgcolor') || (el.localName === 'font' && el.hasAttribute('color')));
     const hasSvgAttr = svg && SVG_ATTRS.some((a) => el.hasAttribute(a));
-    if (!styleAttr && !hasLegacy && !hasSvgAttr) return;
+    const svgText = svg && el.localName === 'text';
+    if (!styleAttr && !hasLegacy && !hasSvgAttr && !svgText) return;
     if (this.lastAttr.has(el) && this.lastAttr.get(el) === styleAttr) return; // 我们自己写的
     if (isIgnored(el, this.ctx.ignoreSelector)) return;
     if (this.isChurning(el)) return;
@@ -67,7 +71,8 @@ export class InlineStyler {
       }
     }
     if (hasSvgAttr) {
-      const role = this.isIcon(el as SVGElement) ? 'fg' : 'bg';
+      // SVG 里的文字（<text>/<tspan>）填充色就是字的颜色，大图里也按文字处理；其余图形大图按背景、小图标按文字
+      const role = SVG_TEXT.has(el.localName) || this.isIcon(el as SVGElement) ? 'fg' : 'bg';
       for (const a of SVG_ATTRS) {
         const v = el.getAttribute(a);
         if (!v || (style.getPropertyValue(a) && !isOurs(a))) continue;
@@ -78,6 +83,7 @@ export class InlineStyler {
         }
       }
     }
+    if (svgText && !el.hasAttribute('fill') && (!style.getPropertyValue('fill') || isOurs('fill'))) this.svgTextFill(el as SVGElement, style, record, write, isOurs);
     if (hasLegacy) {
       const bg = el.getAttribute('bgcolor');
       if (bg && (!style.backgroundColor || isOurs('background-color'))) {
@@ -98,6 +104,27 @@ export class InlineStyler {
     }
     this.lastAttr.set(el, el.getAttribute('style'));
     this.count++;
+  }
+
+  /**
+   * 没写 fill 的 SVG 文字：默认填充是黑色（不是 currentColor），图表的坐标轴文字、流程图里的字在深色底上看不见；
+   * 外层 <g fill="#333"> 在大图里按背景压暗后，继承下来的字也会变深。读计算后的填充色，仍是深色就按文字提亮。
+   */
+  private svgTextFill(
+    el: SVGElement,
+    style: CSSStyleDeclaration,
+    record: (prop: string) => void,
+    write: (prop: string, value: string) => void,
+    isOurs: (prop: string) => boolean,
+  ): void {
+    if (isOurs('fill')) return;
+    const fill = getComputedStyle(el).fill;
+    const c = parseColor(fill);
+    if (!c || c.a === 0 || relativeLuminance(c) > 0.18) return;
+    const t = this.ctx.tx.transform(fill, 'fg');
+    if (!t) return;
+    record('fill');
+    write('fill', t);
   }
 
   /** 元素当前的 style 属性是否就是我们上次写入的结果（用来区分页面自己的改动） */

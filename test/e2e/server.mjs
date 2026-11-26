@@ -152,6 +152,8 @@ export function startServer() {
             `<script>setTimeout(()=>{document.getElementById('app').innerHTML=${JSON.stringify(app)}},1500)</script></body></html>`,
         );
       }
+      // 文字可读性：calc() 算出来的颜色（JetBrains 下拉菜单）、渐变文字、SVG 文字、占位文字等 24 种写法
+      if (url.pathname === '/text') return send('text/html; charset=utf-8', readFileSync(join(dir, 'text.html')));
       if (url.pathname === '/plain') {
         return send('text/html; charset=utf-8', '<!doctype html><html><head><style>body{background:#fff;color:#222}p{border-bottom:1px solid #eee}</style></head><body><p id="p">普通网站</p></body></html>');
       }
