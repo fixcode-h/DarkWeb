@@ -78,10 +78,10 @@
   <section class="card">
     <h2>总是翻译的网站</h2>
     <label class="opt">
-      <span>同域名自动翻译<small>在一个页面点了翻译，同一域名或 IP 下的其他页面打开时自动翻译；点“显示原文”则整个域名或 IP 都不再自动翻译。站点会自动加入或移出下面的列表</small></span>
+      <span>同域名自动翻译<small>在一个页面点了翻译，同一主域名（如 forums.unrealengine.com 归到 unrealengine.com，所有子域名共用）或同一 IP 下的其他页面打开时自动翻译；点“显示原文”则整个域名或 IP 都不再自动翻译。站点会自动加入或移出下面的列表</small></span>
       <span class="switch small"><input type="checkbox" id="sameSite" /><span></span></span>
     </label>
-    <p>每行一个域名或 IP:端口（例如 news.ycombinator.com、192.168.1.10:8080），也可以直接粘贴完整网址。打开这些网站的任何页面时自动翻译。</p>
+    <p>每行一个域名或 IP:端口（例如 news.ycombinator.com、192.168.1.10:8080），也可以直接粘贴完整网址。打开这些网站及其子域名的任何页面时自动翻译。</p>
     <textarea id="autoSites" spellcheck="false" rows="6"></textarea>
   </section>
 

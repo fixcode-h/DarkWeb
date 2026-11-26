@@ -4,7 +4,7 @@ import { engineLang, looksLikeIdentifier, looksLikeTarget, sameLang, worthTransl
 import { targetTop } from '../../src/translate/anchor';
 import { parseSites } from '../../src/translate/options';
 import { DEFAULT_TRANSLATE, normalizeTranslate, siteKeyOf } from '../../src/translate/settings';
-import { nextAutoSites } from '../../src/translate/site-memory';
+import { isAutoSite, nextAutoSites, translateSiteOf } from '../../src/translate/site-memory';
 
 describe('翻译：语言判断', () => {
   it('已是目标语言的文字不再翻译', () => {
@@ -120,11 +120,29 @@ describe('同域名自动翻译', () => {
     expect(normalizeTranslate({}).sameSite).toBe(true);
     expect(normalizeTranslate({ sameSite: false }).sameSite).toBe(false);
   });
-  it('翻译时加入、显示原文时移除，没变化返回 null', () => {
-    expect(nextAutoSites(['a.com'], 'b.com', true)).toEqual(['a.com', 'b.com']);
-    expect(nextAutoSites(['a.com', 'b.com'], 'a.com', false)).toEqual(['b.com']);
-    expect(nextAutoSites(['a.com'], 'a.com', true)).toBeNull();
-    expect(nextAutoSites([], 'a.com', false)).toBeNull();
-    expect(nextAutoSites([], '', true)).toBeNull();
+  it('按主域名记：子域名归到可注册域名，公共后缀分得对，IP 按完整 IP', () => {
+    expect(translateSiteOf('https://forums.unrealengine.com/t/abc')).toBe('unrealengine.com');
+    expect(translateSiteOf('https://www.bbc.co.uk/news')).toBe('bbc.co.uk');
+    expect(translateSiteOf('https://a.b.github.io/x')).toBe('b.github.io');
+    expect(translateSiteOf('http://192.168.1.10:8080/a')).toBe('192.168.1.10:8080');
+    expect(translateSiteOf('http://localhost:3000/')).toBe('localhost:3000');
+    expect(translateSiteOf('https://docs.example.com:8443/')).toBe('example.com:8443');
+    expect(translateSiteOf('chrome://extensions')).toBe('');
+  });
+  it('列表项管得到它自己和子域名，端口要一致', () => {
+    expect(isAutoSite(['unrealengine.com'], 'https://dev.unrealengine.com/x')).toBe(true);
+    expect(isAutoSite(['unrealengine.com'], 'https://unrealengine.com/')).toBe(true);
+    expect(isAutoSite(['unrealengine.com'], 'https://notunrealengine.com/')).toBe(false);
+    expect(isAutoSite(['docs.example.com'], 'https://blog.example.com/')).toBe(false);
+    expect(isAutoSite(['b.github.io'], 'https://c.github.io/')).toBe(false);
+    expect(isAutoSite(['192.168.1.10'], 'http://192.168.1.10:8080/')).toBe(false);
+    expect(isAutoSite(['10.0.0.1'], 'http://1.10.0.0.1/')).toBe(false);
+  });
+  it('翻译时加入主域名、显示原文时移除所有管得到的项，没变化返回 null', () => {
+    expect(nextAutoSites(['a.com'], 'https://forums.unrealengine.com/', true)).toEqual(['a.com', 'unrealengine.com']);
+    expect(nextAutoSites(['unrealengine.com'], 'https://dev.unrealengine.com/', true)).toBeNull();
+    expect(nextAutoSites(['unrealengine.com', 'forums.unrealengine.com', 'a.com'], 'https://forums.unrealengine.com/x', false)).toEqual(['a.com']);
+    expect(nextAutoSites([], 'https://a.com/', false)).toBeNull();
+    expect(nextAutoSites([], 'chrome://newtab', true)).toBeNull();
   });
 });
