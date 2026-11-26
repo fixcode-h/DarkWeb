@@ -18,6 +18,7 @@ import {
   type Settings,
 } from '../shared/settings';
 import { shadowVarName } from './engine/css-value';
+import { dynamicVarsCss } from './engine/dynamic';
 import { SheetRewriter } from './engine/rewriter';
 import { ColorTransformer, buildTheme, type Role } from './engine/transform';
 import { isIgnored, type Ctx } from './context';
@@ -133,7 +134,8 @@ function pageLooksDark(ignoreSelector: string): boolean {
 /** 站点规则生成的样式：vars 直接写进影子变量，css 原样追加 */
 function siteCss(rule: EffectiveRule, tx: ColorTransformer): string {
   // 页面没有自己设底色 / 文字色时的画布颜色，跟随主题和亮度（base.css 里引用）
-  let css = `:root{--drak-page-bg:${tx.transform('#fff', 'bg')};--drak-page-fg:${tx.transform('#000', 'fg')}}\n`;
+  // 运行时才知道的颜色（calc() 算出的通道、相对颜色）引用的映射公式也放这里
+  let css = `:root{--drak-page-bg:${tx.transform('#fff', 'bg')};--drak-page-fg:${tx.transform('#000', 'fg')};${dynamicVarsCss(tx.theme)}}\n`;
   const vars = Object.entries(rule.vars);
   if (vars.length) {
     const roles: Role[] = ['bg', 'fg', 'border', 'shadow'];

@@ -459,6 +459,52 @@ async function main() {
         await page.close();
       }
       {
+        // 文字可读性：每种写法的文字和它所在背景的对比度都要达到 4.5:1（WCAG AA 正文要求）
+        const page = await open(`http://127.0.0.1:${port}/text`, 1500);
+        await page.click('#user'); // 下拉菜单点了才插入页面
+        await page.waitForTimeout(600);
+        const r = await page.evaluate(() => {
+          const t = window.__t;
+          // oklch() / color() 这类计算值交给画布换成 RGB
+          const cv = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+          const rgb = (c) => {
+            if (/^rgba?\(/.test(c)) return t.parse(c);
+            cv.clearRect(0, 0, 1, 1);
+            cv.fillStyle = c;
+            cv.fillRect(0, 0, 1, 1);
+            const d = cv.getImageData(0, 0, 1, 1).data;
+            return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 };
+          };
+          const ratio = (color, el, opacity = 1) => {
+            const bg = t.bgOf(el);
+            const c = rgb(color);
+            const a = c.a * opacity;
+            const fg = { r: c.r * a + bg.r * (1 - a), g: c.g * a + bg.g * (1 - a), b: c.b * a + bg.b * (1 - a) };
+            return t.contrast(fg, bg);
+          };
+          const q = (id) => document.getElementById(id);
+          const out = {};
+          for (const id of ['hdr-link', 'rs-link', 'rs-soft', 'rs-hsl', 'm-profile', 'm-upload', 'm-orgs', 'mix', 'mixvar', 'relative', 'muted', 'hint', 'select', 'prop', 'sys', 'font', 'btn-on', 'btn-off']) {
+            out[id] = ratio(getComputedStyle(q(id)).color, q(id));
+          }
+          out.op = ratio(getComputedStyle(q('op')).color, q('op'), 0.6);
+          for (const id of ['ph', 'ph2', 'ph-default']) out[id] = ratio(getComputedStyle(q(id), '::placeholder').color, q(id));
+          out.pseudo = ratio(getComputedStyle(q('pseudo'), '::before').color, q('pseudo'));
+          out['pseudo-badge'] = ratio(getComputedStyle(q('pseudo-badge'), '::after').color, q('pseudo-badge'));
+          for (const id of ['svg-default', 'svg-attr', 'svg-css']) out[id] = ratio(getComputedStyle(q(id)).fill, q(id));
+          for (const id of ['grad', 'grad2']) {
+            const stops = [...getComputedStyle(q(id)).backgroundImage.matchAll(/(rgba?|oklch|color)\([^)]*\)/g)].map((m) => ratio(m[0], q(id)));
+            out[id] = stops.length ? Math.min(...stops) : 0;
+          }
+          return out;
+        });
+        const low = Object.entries(r).filter(([, v]) => !(v >= 4.5));
+        check('文字可读性：24 种写法的文字对比度都不低于 4.5', low.length === 0, low.map(([k, v]) => `${k}=${v.toFixed(2)}`).join(', ') || `最低 ${Math.min(...Object.values(r)).toFixed(2)}`);
+        check('文字可读性：点开才插入的下拉菜单（颜色由 calc() 算出）', r['m-profile'] >= 4.5 && r['m-orgs'] >= 4.5, `${r['m-profile'].toFixed(2)} / ${r['m-orgs'].toFixed(2)}`);
+        await page.screenshot({ path: join(outDir, 'text.png') });
+        await page.close();
+      }
+      {
         const page = await open(`http://127.0.0.1:${port}/hero`, 1800);
         const st = await state(page);
         const below = await page.evaluate(() => window.__t.info(document.querySelector('#content')).bgLum);
